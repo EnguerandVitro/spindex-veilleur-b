@@ -1,0 +1,39 @@
+{
+ "chaîne_attendue": {
+  "chain_id": 46630,
+  "deploy_block": 122618784,
+  "rewards": "0xb1545499edc98c1621d09f3e586db7c6e5e7b70d"
+ },
+ "empreinte_sources": "cd1efb7a327ecb6ef8a026ff2cf5850ece505f4ad9d542c1b89f2e42275d9338",
+ "exécution": {
+  "commit": "3bcf655b10be4e6803963d66d002eed54e6be6f8",
+  "declare_par": "variables d'environnement du runner — DÉCLARATION, pas preuve",
+  "declencheur": "workflow_dispatch",
+  "depot": "EnguerandVitro/spindex-veilleur-b",
+  "fournisseur": "github-actions",
+  "run_id": "35915837823",
+  "run_number": "1",
+  "tentative": "1",
+  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/35915837823"
+ },
+ "fichiers": {
+  "JUGEMENT.json": "88a575b239dc98249ca68dc9ac270a10fe025b69fb318fdc6e75ab2353cc4c2c",
+  "amorcage.json": "1e78de36a459be78842c88057d01ebe0e44bdafebfb9fe1899ca43ede6764ba0",
+  "battement-passe.json": "b0e6228f15561167cefc076dbe826ecfbe94e7cb004dd82e97ff9844b082bae6",
+  "derniere-passe.json": "893ceeacb67a07a578ed281de60989b7fc87c71e2ac3666899aabe2b49491050",
+  "durees.json": "775401efd4fcd6348fed6dea306663b844fb4741324b3ae709c8d342b05acb1e",
+  "health.json": "549b9aef0cd979dbf12a3d5a5dc4d1025767a337130a3683a08992b3bd340964"
+ },
+ "instance": "b",
+ "jugement": {
+  "motifs": [],
+  "tache": "passe",
+  "verdict": "VERT"
+ },
+ "portée": "Ce lot est l'état publié de l'instance b du veilleur. La signature prouve qu'il vient du détenteur de la clé d'attestation de b, et que ces octets-là n'ont pas bougé. Elle ne prouve ni l'heure, ni qu'aucun lot ne manque, ni que la clé n'a servi qu'ici : GitHub voit le secret, et le propriétaire du compte peut supprimer un job. Le silence de b se juge par la surveillance, pas par ce document.",
+ "produit_le": "2026-09-23T20:28:23Z",
+ "produit_le_ts": 1790195303,
+ "release_du_paquet_scelle": "ecd6d874512c39a62f2c575db5b548117bca4749ccd229d22d224ada8e48f293",
+ "schéma": "spindex-veilleur-b-lot/1",
+ "service": "veilleur"
+}
