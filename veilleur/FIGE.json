@@ -1,8 +1,8 @@
 {
  "format": 2,
  "famille": "backend/veilleur",
- "atelier": "veilleur (correction audit rouge externe : OD-J borne on-chain + ancre de confiance de vérifier, 2026-09-23)",
- "scelle_le": "2026-09-23T17:38:22Z",
+ "atelier": "veilleur (cadence déclarée par instance : période/précision/délai par tâche dans le .env, sans défaut ; balayage KE#116, 2026-09-23)",
+ "scelle_le": "2026-09-23T18:56:56Z",
  "perimetre": [
   "backend/veilleur/*.py",
   "backend/veilleur/*.md",
@@ -14,20 +14,20 @@
   "backend/veilleur/mesures/*"
  ],
  "artefacts": {
-  "backend/rapports/veilleur-exploitation.md": "0cc8614e33259122e175a59902a006d5940740ef28f004807e3567cb83a65be9",
+  "backend/rapports/veilleur-exploitation.md": "3bdd2a81fc3a780af2f713be9772ed685a189fd806765c008bbf631d69e6febc",
   "backend/rapports/veilleur.md": "3c27be762799f92f34413bf50f15ed59d7184d5cf352addf1466179a3af9673e",
-  "backend/veilleur/.env.exemple": "1f5698846c076c8b64638bdd38ac2dbdd02e689748557664bc05e3abcb0631d3",
-  "backend/veilleur/README.md": "c72eebea7fed41d1e9708a1fa8d3ad0e41a618092b04fb6e3a3c260cc3ab7fda",
+  "backend/veilleur/.env.exemple": "80eab967d5ac0b4e92a87194e5af63ed4adc58cdd8c98ea89b37c60f33d01f5d",
+  "backend/veilleur/README.md": "fef1c366551ad8c5418525a13c49376b97864a0791a91188fbf468e01bfd217e",
   "backend/veilleur/__init__.py": "40772bc8e4507a667b9f50f6f095cf62d2623acd27fa08eb1b1e6bce44c57c5f",
-  "backend/veilleur/__main__.py": "fc9bcc0b828caaea59d03106bc5debc9e6fe8d0cfae0bfc5ea412100ed46dabf",
+  "backend/veilleur/__main__.py": "38c5cf87f0d2e3cd0859785411fb5733aa8c3bc7bed15b4a5d35fe5429f9893c",
   "backend/veilleur/amorcage.py": "8f238142a33bfa372d6084eb9787fcb2c1a56384c57adfbf77e9f44ba8f76111",
   "backend/veilleur/artefacts.py": "00413555f9e27b0181ef7bbd87c5a41eb60b8f59b6e85a450baf703c394015d5",
   "backend/veilleur/attest.py": "1c38e843ffd671018c00fee65ac4485aa7302ab81a4619383612058d441c8cee",
-  "backend/veilleur/battement.py": "e4820068e6c2ee227ef9e8d087f2ad6ce9b56fbce77caaa6ca34d17dc05ae82e",
-  "backend/veilleur/bench/cassures.py": "fdd9e4e291bc51517d237dd371edbaa3966f447ba548fce28dafc63cde56a829",
+  "backend/veilleur/battement.py": "d01f9ee0ef5bf2e285a2bb6100075ce801a70c27a3c8ff9993d8d39412685862",
+  "backend/veilleur/bench/cassures.py": "627820323c99106ed9753ce09507a8444e810bd489fb5bf0414cc8070189ea86",
   "backend/veilleur/bench/conftest.py": "37f07dc2d5ab46958defa0c76f3c15fe24a51d0c162ad9ed59f8b8b081d81ccc",
-  "backend/veilleur/bench/e2e_anvil.py": "edf3198854647460f650d00e369100e2f800e63bb52ad5647406ced70a22ea42",
-  "backend/veilleur/bench/fakechain.py": "a4659ba0a6f97fe542b9bad4d09039fdee6876c7c52d8216d16dc55f8c6641fb",
+  "backend/veilleur/bench/e2e_anvil.py": "d69fc97692255fb3234e2464338b1cee73431a5dac73638c56ae337be21874a9",
+  "backend/veilleur/bench/fakechain.py": "bddcf0c03ef4c21670c61c9a972b948e47bc43d1ec72d248df7203bfd27c2d91",
   "backend/veilleur/bench/fixtures/VeilleurOracle.t.sol": "d50c2f76a7a3540375483db0471792b12decad0dacf433b7c7df09914f343c6b",
   "backend/veilleur/bench/fixtures/oracle-veilleur.json": "a1707931f642259167319d9f4809e523c4148796d034df8cb00762b78b36cd6e",
   "backend/veilleur/bench/mesure_cout.py": "d57919e82245e57f3c90f1ac2d9ec7e43dd983d07cf3549da117d3f3a1e498b6",
@@ -35,8 +35,8 @@
   "backend/veilleur/bench/test_chaine_et_sortie.py": "1e416b8943b0570dcede308606d01eb6add9cbc3b0fa823394d0015dc325bd1d",
   "backend/veilleur/bench/test_controls_opendraw.py": "13b74e63776ecbb88a7063156554090b409762e834d0e3ee553a59b710de1990",
   "backend/veilleur/bench/test_controls_postweek.py": "1383f32a3e37749e6511ccd5bd2cd59a2a7e91f2affc845862d8f2b9318c84d5",
-  "backend/veilleur/bench/test_exploitation.py": "46fbef2fec02a7bec84c7c8184f94e36b06b0d29197ad7539c122866385d225e",
-  "backend/veilleur/bench/test_fenetre_besoin.py": "639b622d1b82246d32fb4aaf0a1e37c88047d16f54e7ce11045cbf4a9bbfc240",
+  "backend/veilleur/bench/test_exploitation.py": "8baac65c8ccc2bf2bf875e801b43ae4fa8ae08005b3f1a4423c6d5b63268a673",
+  "backend/veilleur/bench/test_fenetre_besoin.py": "73c07ebb0a0cb43302c6bf7c0a4458ce6d9472e2795a5d272a0630527a2b34b4",
   "backend/veilleur/bench/test_garde_fous.py": "177a780425dd5d1a0c326ab49c5a3451bed149b914132738c6fb8ef6d0858816",
   "backend/veilleur/bench/test_keccak.py": "979454decb4144185035ccf7299b7609f23a86a47d3ba044b2964e91499e4387",
   "backend/veilleur/bench/test_merkle.py": "5d4d465138ea54fa95b748a185f125d5a3a4cf76c132977067a5bb13fa9839ac",
@@ -47,7 +47,7 @@
   "backend/veilleur/chainabi.py": "50ff417e4d123c9eae0e1bb950fbf85963d0e738d910af130cc981c072f0cd48",
   "backend/veilleur/chainread.py": "7574f10095dd7f9585c13c63a3b76c0109009ae550cf73c05d84a7eac335f4c9",
   "backend/veilleur/compte_a_rebours.py": "121228cde7a11d6beb432a063d7688a0a2bc01c5ffea332db214b40701b35196",
-  "backend/veilleur/config.py": "0619fc4cea4e3c8f0a0e5de984030cbbacb66c22da0ce44d60efe55bfc87ad29",
+  "backend/veilleur/config.py": "f20a71f9caa99d5f7351757d5ab15ec576fdcdba11406f439cd9306d8754bd0c",
   "backend/veilleur/controls.py": "05e94cbe0b4f0f5563c58e921f16030795f21a48b15605d755cb906b47221b56",
   "backend/veilleur/journaux.py": "d2cd70c0c6ce34ab3bd71225a62e87e6b8ab482b86c03438619303fc445371fc",
   "backend/veilleur/keccak.py": "a815763349db08fea6d60cbbe867feae7a402afd28f125d967b20099303c87eb",
@@ -77,6 +77,7 @@
   "backend/veilleur/systemd/spindex-veilleur@.timer": "dc9dafaf85bec74570e0cb3fd70d79d09033dff293b2ae76f64caab42cd37466",
   "backend/veilleur/tables.py": "c91a939cf56f829504b5c2b4c805521512df73350b9365a99257c1b8520f3115",
   "backend/veilleur/verdict.py": "652ea9fa7028d0f06d0a2b054b4aec89535db0ab3cb5eda24c1c59469afb8394",
-  "backend/veilleur/window_history.py": "335b1f0ce07fb477cded918fe540358896d8eeddbe1807d9e9fde4811d2a6a1e"
+  "backend/veilleur/window_history.py": "335b1f0ce07fb477cded918fe540358896d8eeddbe1807d9e9fde4811d2a6a1e",
+  "backend/veilleur/mesures/e2e-anvil-2026-09-23-cadence.json": "9d3db19c0405e2088f58e2b8e35d1c8f34d317fdd2e23490672716849abd4546"
  }
 }

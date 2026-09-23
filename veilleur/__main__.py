@@ -318,10 +318,14 @@ def _executer(a, tache):
     bloc = None
     rpc = {}
     tete = deploiement = cadence = None
+    plan = plani = None
     t0 = time.time()
     try:
         s = _settings()
         deploiement = s.deploy_block
+        # Lus AVANT le travail : `health.json` publie la cadence DÉCLARÉE par CETTE instance (5 min sous
+        # systemd pour `a`, 15 min sur GitHub Actions pour `b`). Sans eux, il n'est pas réécrit du tout.
+        plan, plani = s.planification, s.planificateur
         if s.instance and s.instance != a.instance:
             raise ConfigError(f"ARRÊT : le .env déclare l'instance « {s.instance} », l'unité lance "
                               f"« {a.instance} ». Deux instances ne partagent ni état ni battement.")
@@ -365,7 +369,17 @@ def _executer(a, tache):
     # par le battement ET par la sortie — il ne peut plus faire sortir 2 derrière un battement `ok`.
     try:
         enregistrer_duree(bat.dossier, tache, time.time() - t0)
-        ecrire_health(bat.dossier, a.instance, tete=tete, deploiement=deploiement, cadence=cadence)
+        if plan is None:
+            # La configuration n'a pas pu être lue : la cadence déclarée de cette instance est INCONNUE.
+            # Réécrire `health.json` avec une cadence choisie ici serait exactement le défaut corrigé le
+            # 2026-09-23. On ne le réécrit PAS, et on le DIT (KE#105) ; le battement, lui, est écrit et
+            # porte le motif, donc la surveillance verra l'échec sans lire un `health.json` inventé.
+            print("health.json NON réécrit : la planification déclarée de l'instance est inconnue "
+                  "(configuration illisible). L'ancien health.json reste en place et vieillit ; le "
+                  "battement porte le motif.", file=sys.stderr)
+        else:
+            ecrire_health(bat.dossier, a.instance, tete=tete, deploiement=deploiement, cadence=cadence,
+                          planification=plan, planificateur=plani)
     except Exception as e:  # noqa: BLE001
         print(f"ÉCHEC health.json : {type(e).__name__} : {e}", file=sys.stderr)
         resultat, code = "erreur", "health_non_ecrit"

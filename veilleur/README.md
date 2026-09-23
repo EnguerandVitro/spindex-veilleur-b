@@ -148,6 +148,16 @@ python3 -B -m veilleur surveiller --depuis-zéro                             # r
   (`battement-passe.json`, `battement-differentiel-quotidien.json`, `battement-differentiel-complet.json`),
   écrit APRÈS le travail, y compris en échec, avec les 429 comptés (`rpc`). **`health.json`** expose, par
   tâche, `silence_max_s` et `retard_bloc_max` DÉRIVÉS (période du timer + pire cas d'une exécution).
+- **Cadence DÉCLARÉE PAR INSTANCE** (2026-09-23) : `SPINDEX_VEILLEUR_PLANIFICATEUR` et, par tâche,
+  `SPINDEX_VEILLEUR_{PERIODE,PRECISION,DELAI_ALEATOIRE}_<TACHE>_S` — **obligatoires, sans défaut**
+  (KE#73) : une clé absente est un ARRÊT qui la NOMME, et le service ne démarre pas. `a` bat toutes les
+  5 min sous systemd, `b` toutes les 15 min sur GitHub Actions ; une période en dur dans le paquet
+  faisait publier à `b` la borne de `a` (`silence_max_s` 431 s), donc « muette » à chaque passage. La
+  FORMULE est inchangée : seules les trois valeurs viennent désormais du `.env`. Une tâche non planifiée
+  sur une instance se déclare `non-planifiée` (→ `planifiée: false`, `silence_max_s: null`). Ces valeurs
+  sont une **déclaration** : la surveillance doit la recouper avec les battements observés (`passe`,
+  `ts`) et avec un plafond qu'elle tient elle-même — un service ne fixe pas le seuil auquel on l'accuse
+  (KE#130).
 - **429** : attente (`Retry-After`, sinon exponentielle bornée), jamais de découpage de plage ; la plage ne
   se découpe que sur une erreur de TAILLE reconnue.
 - **Unités** (`systemd/`) : gabarits `@a` / `@b`, aucun `${VAR}` dans `ExecStart`, aucun `EnvironmentFile=`.

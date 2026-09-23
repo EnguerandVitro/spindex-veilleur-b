@@ -18,6 +18,9 @@ import os
 import re
 import sys
 
+from .battement import PlanificationError
+from .battement import planificateur as _lire_planificateur
+from .battement import planification as _lire_planification
 from .window_history import BESOIN_DEFAUT_S
 
 # `KEY='valeur'` ou `export KEY='valeur'`. L'apostrophe simple est la SEULE citation acceptée :
@@ -141,6 +144,17 @@ class Settings:
         self.instance = env.get("SPINDEX_VEILLEUR_INSTANCE") or None
         if self.instance not in (None, "a", "b"):
             raise ConfigError(f"ARRÊT : SPINDEX_VEILLEUR_INSTANCE vaut « {self.instance} », attendu a ou b.")
+        # CADENCE DE L'INSTANCE — obligatoire, sans défaut (KE#73). `a` bat toutes les 5 min sous systemd,
+        # `b` toutes les 15 min sur GitHub Actions ; une constante du paquet ferait publier à `b` la borne
+        # de `a`, et la surveillance la déclarerait muette à chaque passage. Une clé absente est un ARRÊT
+        # qui la NOMME : le service refuse de démarrer plutôt que de deviner sa propre cadence.
+        try:
+            self.planificateur = _lire_planificateur(env)
+            self.planification = _lire_planification(env)
+        except PlanificationError as e:
+            # Même chemin de refus que toute autre configuration absente : message NOMMÉ, code 2, et le
+            # battement porte `configuration` (le message dit quelle clé manque).
+            raise ConfigError(str(e)) from e
         # Dossier des battements (un fichier PAR TÂCHE, BATTEMENT.md v1.2) et de health.json.
         self.battement_dir = env.get("SPINDEX_VEILLEUR_BATTEMENT_DIR") or self.state_dir
 

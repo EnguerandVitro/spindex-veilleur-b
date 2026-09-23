@@ -102,6 +102,27 @@ def poser_cle(chemin, hexa):
                             f"(mode {oct(st.st_mode & 0o777)}).")
 
 
+WORKFLOW = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        ".github", "workflows", "veilleur-b.yml")
+
+
+def periode_du_cron(chemin=WORKFLOW):
+    """Période de la passe, en secondes, LUE dans le cron du workflow (jamais recopiée).
+
+    Seule la forme ``*/N * * * *`` est acceptée : c'est celle du workflow livré. Toute autre forme,
+    plusieurs crons, ou aucun cron → ARRÊT qui le dit. Un planificateur qu'on ne sait pas lire ne doit
+    pas produire une cadence devinée : la déclaration servirait ensuite de borne à la surveillance.
+    """
+    with open(chemin, encoding="utf-8") as fh:
+        crons = re.findall(r"^\s*-\s*cron:\s*[\"']([^\"']+)[\"']", fh.read(), re.M)
+    if len(crons) != 1:
+        raise PreparerError(f"ARRÊT : {len(crons)} cron(s) dans {chemin} ; il en faut exactement un.")
+    m = re.fullmatch(r"\*/(\d+) \* \* \* \*", crons[0].strip())
+    if not m:
+        raise PreparerError(f"ARRÊT : cron « {crons[0]} » non reconnu (forme attendue : « */N * * * * »).")
+    return int(m.group(1)) * 60
+
+
 def preparer(config_path, etat_dir, reprise="incrémental"):
     with open(config_path, encoding="utf-8") as fh:
         c = json.load(fh)
@@ -143,6 +164,21 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
         ("SPINDEX_VEILLEUR_BATTEMENT_DIR", os.path.join(etat_dir, "etat")),
         ("SPINDEX_VEILLEUR_INSTANCE", "b"),
         ("SPINDEX_VEILLEUR_REPRISE", reprise),
+        # Cadence de CETTE instance (le paquet scellé ne la porte plus : elle est propre à l'instance).
+        # La période n'est pas recopiée à la main : elle est LUE dans le cron du workflow, qui est
+        # l'autorité réelle de la planification de `b` (KE#130 — la référence vient de la source, pas
+        # du sujet). Un cron qu'on ne sait pas lire est un ARRÊT, jamais une valeur par défaut (KE#73).
+        ("SPINDEX_VEILLEUR_PLANIFICATEUR", "github-actions"),
+        ("SPINDEX_VEILLEUR_PERIODE_PASSE_S", periode_du_cron()),
+        # GitHub retarde et saute des exécutions : la précision annoncée est large, et assumée comme un
+        # CHOIX (elle n'est pas mesurée ; la surveillance recoupe la déclaration avec les battements).
+        ("SPINDEX_VEILLEUR_PRECISION_PASSE_S", 60),
+        ("SPINDEX_VEILLEUR_DELAI_ALEATOIRE_PASSE_S", 0),
+        # Les deux différentiels ne sont PAS planifiés ici (workflow_dispatch seulement) : ils tournent
+        # sur `a`. « non-planifiée » le DÉCLARE ; s'en servir pour une tâche réellement planifiée
+        # reviendrait à acheter son silence.
+        ("SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_QUOTIDIEN_S", "non-planifiée"),
+        ("SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S", "non-planifiée"),
         ("SPINDEX_PUBLISH_DEADLINE_S", int(c.get("publish_deadline_s") or 300)),
         ("SPINDEX_WINDOW_ALERT_S", int(c.get("window_alert_s") or 720)),
         ("SPINDEX_WINDOW_NEED_S", int(c.get("window_need_s") or 480)),

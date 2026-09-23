@@ -42,17 +42,104 @@ def empreinte_sources(racine=_ICI):
     return h.hexdigest()
 
 
-# Tâches du veilleur, et leur planification — la MÊME que celle des timers de `systemd/` (un test la relit
-# PAR SYSTEMD, `systemd-analyze calendar`, et exige l'égalité : une dérive entre ce tableau et les unités
-# fausserait silencieusement les `silence_max_s` exposés).
+# Tâches du veilleur. Leur PLANIFICATION n'est PAS ici : elle est propre à l'INSTANCE.
+#
+# Pourquoi (défaut mesuré le 2026-09-23) : `période_s` valait 300 EN DUR — la cadence du timer systemd de
+# l'instance `a`. L'instance `b` tourne sur GitHub Actions toutes les 15 minutes ; elle publiait donc un
+# `silence_max_s` de 431 s et la surveillance l'aurait déclarée MUETTE à chaque passage. Élargir la borne
+# aurait fait taire une alerte VRAIE pour un service lent (KE#121) : la période est une donnée de
+# CONFIGURATION de l'instance, et `silence_max_s` en dérive par la formule inchangée.
+#
+# `unité` reste ici : c'est le nom du timer systemd de RÉFÉRENCE, celui que `systemd/` livre et qu'un test
+# relit PAR SYSTEMD (`systemd-analyze calendar`) pour vérifier qu'il tient bien la période que `.env.exemple`
+# déclare pour `a`. Une instance qui n'est pas lancée par systemd (GitHub Actions) ne le publie pas.
 TACHES = {
-    "passe": {"unité": "spindex-veilleur@.timer", "période_s": 300, "précision_s": 10,
-              "délai_aléatoire_s": 0},
+    "passe": {"unité": "spindex-veilleur@.timer", "clé": "PASSE"},
     "differentiel-quotidien": {"unité": "spindex-veilleur-differentiel-quotidien@.timer",
-                               "période_s": 86_400, "précision_s": 60, "délai_aléatoire_s": 1800},
+                               "clé": "DIFFERENTIEL_QUOTIDIEN"},
     "differentiel-complet": {"unité": "spindex-veilleur-differentiel@.timer",
-                             "période_s": 604_800, "précision_s": 60, "délai_aléatoire_s": 1800},
+                             "clé": "DIFFERENTIEL_COMPLET"},
 }
+
+# Valeur qui déclare, EXPLICITEMENT, qu'une tâche n'est pas planifiée sur cette instance (l'instance `b`
+# ne lance ses différentiels qu'à la main). Ce n'est pas un silence : `health.json` publie alors
+# `planifiée: false` et `silence_max_s: null`, et la surveillance a de quoi distinguer « je n'ai pas de
+# cadence » de « je n'ai pas pu dériver ma borne » (KE#105).
+NON_PLANIFIEE = "non-planifiée"
+
+PLANIFICATEURS = ("systemd", "github-actions")
+
+
+class PlanificationError(BattementError):
+    """Planification d'instance absente, incomplète ou hors domaine. Jamais de valeur par défaut (KE#73)."""
+
+
+def cles_planification(tache):
+    """Les trois clés `.env` qui déclarent la planification de `tache` sur CETTE instance."""
+    c = TACHES[tache]["clé"]
+    return (f"SPINDEX_VEILLEUR_PERIODE_{c}_S", f"SPINDEX_VEILLEUR_PRECISION_{c}_S",
+            f"SPINDEX_VEILLEUR_DELAI_ALEATOIRE_{c}_S")
+
+
+def _entier(env, cle, minimum):
+    v = (env.get(cle) or "").strip()
+    if not v:
+        raise PlanificationError(_MANQUE.format(cle=cle))
+    try:
+        n = int(v)
+    except ValueError:
+        raise PlanificationError(f"ARRÊT : {cle} n'est pas un entier de secondes. Une planification "
+                                 f"illisible ne se remplace pas par une valeur choisie.") from None
+    if n < minimum:
+        raise PlanificationError(f"ARRÊT : {cle} vaut {n}, attendu ≥ {minimum}. Une période nulle ou "
+                                 f"négative rendrait un `silence_max_s` que rien ne peut tenir.")
+    return n
+
+
+_MANQUE = ("ARRÊT : {cle} n'est pas déclarée. La cadence d'une instance est une donnée de CONFIGURATION, "
+           "pas une constante du paquet : l'instance `a` bat toutes les 5 min sous systemd, l'instance `b` "
+           "toutes les 15 min sur GitHub Actions. Déclarer la valeur en secondes dans le `.env` de CETTE "
+           "instance (voir `.env.exemple`), ou « " + NON_PLANIFIEE + " » si la tâche n'est pas planifiée ici.")
+
+
+def planification(env):
+    """Planification DÉCLARÉE par l'instance : une entrée par tâche, lue dans son `.env`.
+
+    Aucun défaut silencieux (KE#73) : une clé absente est un ARRÊT qui NOMME la clé manquante, et
+    l'instance refuse de démarrer. Le cardinal est vérifié : une planification qui ne couvrirait pas
+    toutes les tâches passerait « sans faute » sans rien déclarer (KE#111).
+    """
+    plan = {}
+    for tache in TACHES:
+        kper, kacc, krnd = cles_planification(tache)
+        brut = (env.get(kper) or "").strip()
+        if brut == NON_PLANIFIEE:
+            plan[tache] = {"planifiée": False, "période_s": None, "précision_s": None,
+                           "délai_aléatoire_s": None,
+                           "source": f"{kper}={NON_PLANIFIEE} (déclarée non planifiée sur cette instance)"}
+            continue
+        # Pas de contrôle d'absence ici : `_entier` porte le refus et NOMME la clé. Un second contrôle
+        # au-dessus ne pourrait jamais rougir sous cassure — il aurait l'air d'une garde et n'en serait
+        # pas une (KE#129). Trouvé en exerçant le harnais : la cassure de cette ligne restait VERTE.
+        plan[tache] = {"planifiée": True,
+                       "période_s": _entier(env, kper, 1),
+                       "précision_s": _entier(env, kacc, 0),
+                       "délai_aléatoire_s": _entier(env, krnd, 0),
+                       "source": f"déclarée par {kper} / {kacc} / {krnd} dans le .env de l'instance"}
+    if set(plan) != set(TACHES):                    # cardinal (KE#111)
+        raise PlanificationError(f"ARRÊT : planification incomplète, {sorted(set(TACHES) - set(plan))} "
+                                 f"sans déclaration.")
+    return plan
+
+
+def planificateur(env):
+    """Qui déclenche cette instance. Déclaré, jamais deviné : `a` est lancée par systemd, `b` par GitHub."""
+    v = (env.get("SPINDEX_VEILLEUR_PLANIFICATEUR") or "").strip()
+    if v not in PLANIFICATEURS:
+        raise PlanificationError(f"ARRÊT : SPINDEX_VEILLEUR_PLANIFICATEUR vaut « {v} », attendu "
+                                 f"{PLANIFICATEURS}. Ce que `health.json` publie sur le déclencheur ne "
+                                 f"se devine pas depuis le paquet : les deux instances n'ont pas le même.")
+    return v
 
 # Mesures qui fondent la borne THÉORIQUE du pire cas, quand aucune durée n'a encore été observée.
 # Provenance : rapports/veilleur-exploitation.md §1 (banc 2026-09-21 ; RPC 4663 mesuré 2026-09-21 21:02Z).
@@ -155,17 +242,24 @@ def enregistrer_duree(dossier, tache, duree_s, garder=200):
     return d
 
 
-def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_BLOCS_S):
+def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_BLOCS_S, *, periode_s):
     """Pire cas d'une exécution : max(borne THÉORIQUE, max OBSERVÉ). Rend (secondes, provenance).
 
     La borne théorique vient des mesures (appels × latence max) ; l'observé la relève si la réalité est
     pire. Jamais la moyenne : une borne de sûreté tirée d'une moyenne se fait battre une fois sur deux.
+
+    `periode_s` est DÉCLARÉ par l'instance et n'a pas de défaut (KE#62) : le différentiel quotidien relit
+    les blocs figés DEPUIS le différentiel précédent, donc son volume est celui de SA période — 86 400 s
+    en dur ici était le même défaut que `TACHES["…"]["période_s"] = 300`, à un consommateur près (KE#116).
+    Une tâche non planifiée n'a pas de volume prévisible : sa borne théorique n'est pas dérivable, et
+    seul l'observé parle.
     """
     if tache == "passe":
         appels = APPELS_PASSE_A_CHAUD
     elif tache == "differentiel-quotidien":
         from .journaux import MARGE_QUOTIDIENNE
-        appels = APPELS_PASSE_A_CHAUD + (86_400 * cadence + MARGE_QUOTIDIENNE) / BLOCS_PAR_APPEL
+        appels = None if periode_s is None else (
+            APPELS_PASSE_A_CHAUD + (periode_s * cadence + MARGE_QUOTIDIENNE) / BLOCS_PAR_APPEL)
     else:
         if tete is None or deploiement is None:
             appels = None
@@ -184,39 +278,67 @@ def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_
     return round(v, 1), src
 
 
-def derive(tache, pire_s, cadence=CADENCE_MAX_BLOCS_S):
+def derive(tache, pire_s, cadence=CADENCE_MAX_BLOCS_S, *, plan_tache):
     """`silence_max_s` et retard de bloc admissible, DÉRIVÉS (BATTEMENT.md v1.2, lectures 1 et 3).
 
     Silence : entre deux fins d'exécution, au plus une période + la précision et le délai aléatoire du
-    timer + la durée de l'exécution suivante ; si le pire cas dépasse la période, systemd saute le
-    déclenchement suivant (unité encore active) : on ajoute une période par dépassement.
+    timer + la durée de l'exécution suivante ; si le pire cas dépasse la période, le planificateur saute
+    le déclenchement suivant (systemd : unité encore active ; GitHub Actions : `concurrency` sans
+    annulation) : on ajoute une période par dépassement. FORMULE INCHANGÉE — seules les trois valeurs
+    viennent désormais de la DÉCLARATION de l'instance (`plan_tache`) et non d'une constante du paquet.
     Retard : `bloc` est la tête lue au DÉBUT de l'exécution ; la surveillance peut lire jusqu'à
     `silence_max_s` après la fin, donc au plus `pire + silence_max` secondes plus tard, à la cadence max.
+    Une tâche déclarée NON PLANIFIÉE ne rend aucune borne : il n'y a pas de silence à borner, et un
+    nombre choisi ici serait une borne inventée.
     """
-    t = TACHES[tache]
-    if pire_s is None:
+    if tache not in TACHES:
+        raise BattementError(f"ARRÊT : tâche « {tache} » inconnue, attendu {sorted(TACHES)}.")
+    if pire_s is None or not plan_tache["planifiée"]:
         return None, None
-    per = t["période_s"]
-    silence = per + t["précision_s"] + t["délai_aléatoire_s"] + pire_s
+    per = plan_tache["période_s"]
+    silence = per + plan_tache["précision_s"] + plan_tache["délai_aléatoire_s"] + pire_s
     silence += per * int(pire_s // per)
     retard = int(-(-((pire_s + silence) * cadence) // 1))
     return int(-(-silence // 1)), retard
 
 
-def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None):
-    """`health.json` : ce que la surveillance lit pour ne rien choisir elle-même (v1.2)."""
+def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, *,
+                  planification, planificateur):
+    """`health.json` : ce que la surveillance lit pour ne rien choisir elle-même (v1.2).
+
+    `planification` et `planificateur` sont OBLIGATOIRES et sans défaut (KE#62) : ils viennent du `.env`
+    de l'instance. Une valeur par défaut ici ré-introduirait exactement le défaut corrigé — la cadence de
+    `a` publiée par `b`. L'ancienne forme d'appel (`ecrire_health(dossier, instance)`) lève `TypeError`,
+    et un test le vérifie.
+    """
     p = os.path.join(dossier, "durees.json")
     durees = {}
     if os.path.exists(p):
         with open(p, "r", encoding="utf-8") as fh:
             durees = json.load(fh)
     cad = cadence if cadence and cadence > CADENCE_MAX_BLOCS_S else CADENCE_MAX_BLOCS_S
+    if set(planification) != set(TACHES):           # cardinal (KE#111) : une entrée par tâche, ni plus ni moins
+        raise PlanificationError(f"ARRÊT : la planification déclarée couvre {sorted(planification)}, "
+                                 f"attendu {sorted(TACHES)}.")
     taches = {}
     for nom, t in TACHES.items():
-        pire, src = pire_cas(nom, durees.get(nom, []), tete, deploiement, cad)
-        silence, retard = derive(nom, pire, cad)
+        pl = planification[nom]
+        pire, src = pire_cas(nom, durees.get(nom, []), tete, deploiement, cad,
+                             periode_s=pl["période_s"])
+        silence, retard = derive(nom, pire, cad, plan_tache=pl)
         taches[nom] = {
-            "fichier": f"battement-{nom}.json", "timer": t["unité"], "période_s": t["période_s"],
+            "fichier": f"battement-{nom}.json",
+            # Le nom du timer n'est publié que par une instance RÉELLEMENT lancée par systemd : `b`
+            # tourne sur GitHub Actions et publier « spindex-veilleur@.timer » y serait un mensonge.
+            "timer": t["unité"] if planificateur == "systemd" else None,
+            "planificateur": planificateur,
+            "planifiée": pl["planifiée"],
+            "période_s": pl["période_s"], "précision_s": pl["précision_s"],
+            "délai_aléatoire_s": pl["délai_aléatoire_s"],
+            # Une DÉCLARATION, pas une mesure : la surveillance doit la recouper avec les battements
+            # réellement observés (`passe` et `ts`), sinon une instance qui annonce 15 min et bat toutes
+            # les heures s'achète son propre silence (KE#130 : la borne ne vient pas du sujet contrôlé).
+            "période_provenance": "DÉCLARÉE par l'instance — " + pl["source"],
             "pire_exécution_s": pire, "pire_exécution_source": src,
             "silence_max_s": silence, "retard_bloc_max": retard,
             "formules": {"silence_max_s": "période + précision + délai_aléatoire + pire "
@@ -224,7 +346,7 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None):
                          "retard_bloc_max": "ceil((pire + silence_max_s) × cadence_max)"},
         }
     doc = {"format": 1, "service": SERVICE, "instance": instance, "ts": int(time.time()),
-           "empreinte": empreinte_sources(),
+           "empreinte": empreinte_sources(), "planificateur": planificateur,
            "cadence_blocs_s": {"valeur": cad, "source": "max(mesure de la passe, 9,98 mesuré le 2026-09-21)"},
            "taches": taches}
     _ecrire_json(os.path.join(dossier, "health.json"), doc)
