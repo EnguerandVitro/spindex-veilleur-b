@@ -1,0 +1,68 @@
+# SPINDEX — veilleur, instance « b », sur une infrastructure indépendante de la machine du keeper.
+#
+# La décision du 2026-09-21 exige DEUX veilleurs, le second sur un autre fournisseur et un autre
+# compte. L'instance « a » tourne sur la machine du keeper : si cette machine tombe ou est compromise,
+# le témoin tombe avec elle. Ce job est le témoin qui ne tombe pas avec elle.
+#
+# Ce que ce montage NE protège PAS est écrit dans le README, en tête. Le lire d'abord.
+#
+# ------------------------------------------------------------------------------------ la cadence
+# `schedule` de GitHub Actions ne descend pas sous 5 minutes, et ses exécutions sont au MIEUX
+# approximatives : GitHub annonce lui-même des retards, et des passages SAUTÉS en période de charge.
+# Un `*/5` ne serait donc pas « toutes les 5 minutes », ce serait « toutes les 5 à 25 minutes ».
+#
+# `*/15`, et voici pourquoi c'est le bon choix plutôt qu'un compromis :
+#   — ce que `b` doit garantir n'est PAS la règle des 5 minutes de publication d'une table. Celle-là
+#     appartient à `a`, sous systemd, sur une machine que nous tenons, avec un timer qui tient
+#     réellement ses 5 minutes. `b` garantit qu'un silence ou un mensonge de `a` se VOIE ;
+#   — l'échelle des choses que `b` doit voir est la semaine (`postWeek`), et les échéances du contrat
+#     sont à J+30 et J+90. Un quart d'heure est sans commune mesure avec ces bornes ;
+#   — `*/15` donne trois fois plus de marge face aux retards de la plateforme, et divise par trois la
+#     charge RPC d'un veilleur qui n'a pas de nœud à lui.
+#
+# ⚠️ NON RÉSOLU ICI, et pas résoluble ici : le `health.json` que `b` publie est écrit par le paquet
+# SCELLÉ, dont `battement.TACHES["passe"]["période_s"]` vaut 300 s en dur (la cadence du timer
+# systemd). La surveillance en dérive `silence_max_s ≈ 431 s` et déclarera `b` MUET à chaque passage.
+# Voir `DEMANDE-SURVEILLANCE.md`, point 3.
+#
+# ------------------------------------------------------------------------- ce que le job publie
+# Les deux, et chacun pour une raison différente :
+#   — un ARTEFACT, attaché à l'exécution : il survit à un échec de poussée, il porte les journaux
+#     bruts, et il est là même quand la branche ne l'est pas. Il expire (90 jours) et il faut un
+#     compte pour le lire : il ne peut donc pas être le canal de la surveillance. C'est le FILET ;
+#   — un COMMIT sur la branche `attestations` : permanent, horodaté par GitHub, lisible par un simple
+#     `git fetch` depuis n'importe où, sans compte ni jeton si le dépôt est public. C'est le CANAL.
+#
+# ------------------------------------------------------------------------------- l'échec du job
+# Le paquet scellé sort 0 quand une passe a fait son travail, MÊME si elle a trouvé une P0 : c'est
+# juste pour un service surveillé en continu, faux ici, où le seul signal que quelqu'un regarde est
+# la croix rouge. `outils/juger.py` traduit, et la barrière finale fait échouer le job — APRÈS avoir
+# publié, jamais avant (un veilleur qui se tait quand il trouve quelque chose est pire qu'absent).
+
+name: sonde2
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      tache:
+        description: "Tâche à exécuter"
+        type: choice
+        default: passe
+        options: [passe, differentiel-quotidien, differentiel-complet]
+
+# Jamais deux exécutions en parallèle : elles se disputeraient la branche et, pire, le compteur de
+# passe (qui doit être strictement croissant) et le verrou du cache des journaux.
+concurrency:
+  group: veilleur-b
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # pousser la branche `attestations`. Rien d'autre.
+
+jobs:
+  s:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo ok
