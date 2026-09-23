@@ -8,21 +8,21 @@
  "exécution": {
   "commit": "3bcf655b10be4e6803963d66d002eed54e6be6f8",
   "declare_par": "variables d'environnement du runner — DÉCLARATION, pas preuve",
-  "declencheur": "workflow_dispatch",
+  "declencheur": "schedule",
   "depot": "EnguerandVitro/spindex-veilleur-b",
   "fournisseur": "github-actions",
-  "run_id": "35915837823",
-  "run_number": "1",
+  "run_id": "35931076143",
+  "run_number": "2",
   "tentative": "1",
-  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/35915837823"
+  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/35931076143"
  },
  "fichiers": {
-  "JUGEMENT.json": "88a575b239dc98249ca68dc9ac270a10fe025b69fb318fdc6e75ab2353cc4c2c",
+  "JUGEMENT.json": "efd3c3a1cdbb165040f8c62ebcd5dd35817f9559cef69cd85c7ddc5fa5123cad",
   "amorcage.json": "1e78de36a459be78842c88057d01ebe0e44bdafebfb9fe1899ca43ede6764ba0",
-  "battement-passe.json": "b0e6228f15561167cefc076dbe826ecfbe94e7cb004dd82e97ff9844b082bae6",
-  "derniere-passe.json": "893ceeacb67a07a578ed281de60989b7fc87c71e2ac3666899aabe2b49491050",
-  "durees.json": "775401efd4fcd6348fed6dea306663b844fb4741324b3ae709c8d342b05acb1e",
-  "health.json": "549b9aef0cd979dbf12a3d5a5dc4d1025767a337130a3683a08992b3bd340964"
+  "battement-passe.json": "052ed498a3088df9e0b8c880eec9831dd3e0def79b21b33194ebe8320fb4250f",
+  "derniere-passe.json": "1c38b7893229b03af214d72d8656b194e6614dd465aa026f0b034454d1d131e0",
+  "durees.json": "45d9e6150f9cdd2dd30ed66466766d51afde408d57a172f9ac2aba3a51731b29",
+  "health.json": "9a9912da5875a3c68dfe29ed9a806fdff72c4243e2f2639c488480637a173ded"
  },
  "instance": "b",
  "jugement": {
@@ -31,8 +31,8 @@
   "verdict": "VERT"
  },
  "portée": "Ce lot est l'état publié de l'instance b du veilleur. La signature prouve qu'il vient du détenteur de la clé d'attestation de b, et que ces octets-là n'ont pas bougé. Elle ne prouve ni l'heure, ni qu'aucun lot ne manque, ni que la clé n'a servi qu'ici : GitHub voit le secret, et le propriétaire du compte peut supprimer un job. Le silence de b se juge par la surveillance, pas par ce document.",
- "produit_le": "2026-09-23T20:28:23Z",
- "produit_le_ts": 1790195303,
+ "produit_le": "2026-09-23T22:57:24Z",
+ "produit_le_ts": 1790204244,
  "release_du_paquet_scelle": "ecd6d874512c39a62f2c575db5b548117bca4749ccd229d22d224ada8e48f293",
  "schéma": "spindex-veilleur-b-lot/1",
  "service": "veilleur"

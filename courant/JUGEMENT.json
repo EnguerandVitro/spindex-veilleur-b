@@ -1,33 +1,33 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 123332103,
+  "bloc": 123369281,
   "code": null,
-  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 1.66 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 1.76 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "cd1efb7a327ecb6ef8a026ff2cf5850ece505f4ad9d542c1b89f2e42275d9338",
   "format": 1,
   "instance": "b",
-  "passe": 1,
+  "passe": 2,
   "resultat": "ok",
   "rpc": {
-   "appels": 115,
+   "appels": 147,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790195303
+  "ts": 1790204244
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": null,
+ "compteur_precedent": 1,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-23T20:28:23Z",
- "juge_le_ts": 1790195303,
+ "juge_le": "2026-09-23T22:57:24Z",
+ "juge_le_ts": 1790204244,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 1.66 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 1.76 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
  "tache": "passe",
  "verdict": "VERT"
