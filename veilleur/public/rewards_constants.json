@@ -1,0 +1,329 @@
+{
+ "_doc": "Constantes du contrat des distributions SPINDEX v1 (rewards/REWARDS_SPEC.md), générées par rewards/ref/make_constants.py : NE PAS ÉDITER. Montants USDG en unités de 6 décimales ; $SPDX en unités brutes de 18 décimales ; boost en fixe 1e18 ; durées en secondes. `sources` donne pour chaque clé le fichier et la citation exacte, vérifiée à la génération. Détail et questions ouvertes : rewards/rapports/reference.md.",
+ "amount_max": 340282366920938463463374607431768211455,
+ "boost_cap_s": 5184000,
+ "boost_halve_den": 2,
+ "boost_halve_num": 1,
+ "boost_max": 3000000000000000000,
+ "boost_min": 1000000000000000000,
+ "boost_scale": 1000000000000000000,
+ "boost_step_s": 2592000,
+ "bps": 10000,
+ "burn_impact_bps": 150,
+ "claim_window_s": 7776000,
+ "drand_genesis": 1692803367,
+ "drand_period": 3,
+ "draw_claim_window_s": 2592000,
+ "draw_delta_max_s": 60,
+ "draw_delta_min_s": 30,
+ "draw_delta_s": 60,
+ "exit_burn_bps": 1000,
+ "format_version": 1,
+ "house_edge_bps": 390,
+ "inputs_sha256": {
+  "contracts/rewards/REWARDS_SPEC.md": "d36a4f81298efdbb87215ce7b6dde1964a73887e70e0b76c45e43abba65ed81a",
+  "contracts/rewards/rapports/reconnaissance.md": "e0e9543e35d5ea922f871b5906961d61fdd1dad5569f269c6659e809669ebfec",
+  "contracts/src/DrandQuicknetVerifier.sol": "c542c446189e045ba58ff10469975e0ac1c9756dce0cae30015b11bc9f405b22",
+  "contracts/src/SpinTickets.sol": "c94649d70ceca478e7a323275619d8c27fc22cd35e1c22e1654706f10a2a99b3",
+  "contracts/src/SpindexRewards.sol": "62288f34742aec711cb872c156d709d94037129b90828d93a93c6995ff8ee85a",
+  "contracts/vault/VAULT_SPEC.md": "e3b78a3e337ff98700735300bcf3033fae3fd0663f1fc8732ef4814b1c037aa9",
+  "docs/TREASURY_POLICY.md": "81928c9093082f4b4bc3382f96ce2f2a7c82c084e99561d1f77c6c21c3b30459",
+  "sim/tokenomics.py": "efed972c1d45877247b6e75f1e468718d7ba5eaf0103bb7ab988c5cf1e139f96"
+ },
+ "launch_fdv_usd": 2000000,
+ "launch_price_usdg_e6_per_spdx": 2000,
+ "merkle": {
+  "claim_fields": [
+   "address player",
+   "uint256 weekId",
+   "uint256 rakebackUsdg",
+   "uint256 revshareUsdg"
+  ],
+  "claim_leaf_order": "feuilles triées par (player, weekId) avant construction",
+  "draw_fields": [
+   "address player",
+   "uint256 weekId",
+   "uint256 index",
+   "uint256 cumulativeFrom",
+   "uint256 cumulativeTo"
+  ],
+  "draw_leaf_order": "feuilles triées par index ; intervalles [from, to) pavant exactement [0, totalWeight)",
+  "leaf": "keccak256(bytes.concat(keccak256(abi.encode(...))))",
+  "node": "keccak256(a < b ? a||b : b||a)  — paires triées",
+  "odd_node": "promu tel quel, JAMAIS dupliqué"
+ },
+ "pool_fee_bps": 30,
+ "rakeback_envelope_bps": 1000,
+ "rank_names": [
+  "Penny",
+  "Small Cap",
+  "Mid Cap",
+  "Large Cap",
+  "Mega Cap"
+ ],
+ "rank_rate_bps": [
+  0,
+  500,
+  1000,
+  2000,
+  3000
+ ],
+ "rank_threshold_supply_bps": [
+  0,
+  5,
+  25,
+  100,
+  375
+ ],
+ "rank_threshold_tokens": [
+  0,
+  500000000000000000000000,
+  2500000000000000000000000,
+  10000000000000000000000000,
+  37500000000000000000000000
+ ],
+ "rank_threshold_usd": [
+  0,
+  1000,
+  5000,
+  20000,
+  75000
+ ],
+ "reference_choices": {
+  "_doc": "Règles de calcul retenues là où §2–§6 laisse le choix ; chaque ligne a une cassure volontaire.",
+  "boost": "e = min(t − ancre, boost_cap_s) ; boost = boost_min + boost_min × e // boost_step_s (division ENTIÈRE)",
+  "boost_anchor_add": "§11.4 : ancre ← (q0 × max(a0, t − 60 j) + q1 × t) / (q0 + q1), division ENTIÈRE, ancienneté PLAFONNÉE avant la moyenne",
+  "boost_anchor_halve": "§15 : nb = max(boost_min, boost // 2) puis ancre ← t − (nb − boost_min) × boost_step_s // boost_min — c'est le MULTIPLICATEUR qui est divisé (cascade ×3 → ×1,5 → ×1) ; sans effet si l'ancre vaut déjà t",
+  "draw_return": "§11.8 : 30 j depuis le règlement, ou depuis l'ouverture si le tirage n'a jamais été réglé",
+  "exit_burn_deferred": "§11.6 : si le `burn` du token échoue, les 10 % sont mis de côté (`strandedBurn`) et la sortie aboutit quand même ; `flushExitBurn()` les rebrûle, ouverte à tous",
+  "exit_split": "brûlé = floor(montant × exit_burn_bps / bps) ; rendu = montant − brûlé",
+  "fund_burn": "§11.1 : `fundBurn(weekId, usdg)` est une BORNE COMPTABLE déclarée par le Safe — aucun USDG n'entre au contrat (le keeper achète hors chaîne)",
+  "pause": "§7 : la pause bloque stake / setReferrer / openDraw / burn ; jamais unstake, claim, claimPrize, settleDraw, sweepWeek, returnPrize, flushExitBurn",
+  "prize_token": "aucune interdiction de prizeToken == $SPDX : la comptabilité par passif (`prizeReserved`) suffit à protéger les stakes",
+  "rank": "rang = plus grand i tel que stake_effectif ≥ rank_threshold_tokens[i] (stake effectif = montant × boost // boost_scale)",
+  "stake_fee": "§2 + §11.14 : delta ≠ montant ⇒ REVERT FeeOnTransferNotSupported ; la SORTIE crédite le delta mesuré CÔTÉ BÉNÉFICIAIRE et ne révèle jamais pour cause de frais",
+  "week_funding": "§11.2 : `fundWeek(weekId, usdg)` verse (cumulable), `postWeek(weekId, root, totalUsdg, leafCount)` publie ; la borne des paiements est le VERSÉ (`funded`), `totalUsdg` n'est qu'annoncé",
+  "week_sweep": "§11.7 : 90 j depuis la publication, ou depuis le VERSEMENT si la semaine n'a jamais été publiée"
+ },
+ "revshare_cap_bps": 3000,
+ "sources": {
+  "boost_anchor_capped": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`oldAnchor ← max(oldAnchor, now − 60 j)`"
+  },
+  "boost_anchor_weighted": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "l'ancre de boost devient la **moyenne pondérée** des ancres"
+  },
+  "boost_cap_s": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "plafonné à **×3 à 60 jours**"
+  },
+  "boost_halve_on_claim": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "boost **divisé par deux** (jamais sous ×1)"
+  },
+  "boost_reset_on_unstake": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "le boost du reste **retombe à ×1**"
+  },
+  "boost_step_s": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "×1 au départ, **+1/30 par jour**, plafonné à **×3 à 60 jours**"
+  },
+  "burn_impact_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "chaque achat reste sous 150 bps d'impact"
+  },
+  "claim_pays_sender": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`claim` ne paie que `msg.sender`"
+  },
+  "claim_window_s": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "Semaine non réclamée après **90 jours**"
+  },
+  "drand_genesis": {
+   "file": "contracts/src/DrandQuicknetVerifier.sol",
+   "quote": "uint256 public constant GENESIS_TIME = 1692803367;"
+  },
+  "drand_period": {
+   "file": "contracts/src/DrandQuicknetVerifier.sol",
+   "quote": "uint256 public constant PERIOD = 3;"
+  },
+  "draw_claim_window_s": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "sans réclamation sous 30 jours, le prix\n  retourne au Safe"
+  },
+  "draw_delta_max_s": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "uint256 public constant MAX_DELTA = 60;"
+  },
+  "draw_delta_min_s": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "uint256 public constant MIN_DELTA = 30;"
+  },
+  "draw_delta_s": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**DELTA de déploiement : 60 s.**"
+  },
+  "draw_tiling": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "**pavent exactement** `[0, totalWeight)` sans trou ni recouvrement"
+  },
+  "draw_window_from_settlement": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "les 30 jours courent depuis le **règlement**"
+  },
+  "exit_burn_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**10 % brûlés**, 90 % rendus"
+  },
+  "exit_burn_deferred": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**Burn de sortie différé conservé**"
+  },
+  "exit_burn_published": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "Le **burn de sortie** (les 10 %) est publié au tableau de bord"
+  },
+  "fund_burn_declaratif": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`fundBurn` est **déclaratif**"
+  },
+  "halve_multiplier_not_elapsed": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**« Boost divisé par deux » = le MULTIPLICATEUR, pas l'ancienneté**"
+  },
+  "halve_three_to_one_and_a_half": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`boost ← max(1, boost / 2)` (×3 → ×1,5), pas ×3 → ×2"
+  },
+  "house_edge_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "rakeback = Σ (mise × 390 bps ×"
+  },
+  "launch_fdv_usd": {
+   "file": "docs/TREASURY_POLICY.md",
+   "quote": "ventes ACF au-delà de 2 M$ de FDV"
+  },
+  "merkle_leaf_claim": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "keccak256(bytes.concat(keccak256(abi.encode(player, weekId, rakebackUsdg, revshareUsdg))))"
+  },
+  "merkle_no_odd_duplication": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "**ne pas dupliquer le dernier nœud**"
+  },
+  "merkle_sorted_pairs": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "**paires triées**"
+  },
+  "min_delta_floor": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**`MIN_DELTA` = 30 s, DELTA de déploiement 60 s (§24)**"
+  },
+  "open_draw_total_weight": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`totalWeight` est figé AVANT le hasard"
+  },
+  "pool_fee_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "fork Uniswap V2 à 30 bps"
+  },
+  "post_week_envelope_check": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`postWeek` exige `totalUsdg ≤ funded(weekId)`"
+  },
+  "post_week_leafcount": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`postWeek(weekId, merkleRoot, totalUsdg, leafCount)`"
+  },
+  "rakeback_envelope_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "10 % de la marge pour le rakeback"
+  },
+  "rank_names": {
+   "file": "sim/tokenomics.py",
+   "quote": "(20_000, 0.20, \"Large Cap\"), (75_000, 0.30, \"Mega Cap\")"
+  },
+  "rank_rate_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "Mid 10 %, Large 20 %, Mega 30 %"
+  },
+  "rank_threshold_usd": {
+   "file": "sim/tokenomics.py",
+   "quote": "TIERS = [(0, 0.00, \"Penny\"), (1_000, 0.05, \"Small Cap\"), (5_000, 0.10, \"Mid Cap\"),"
+  },
+  "rank_thresholds_fixed_in_tokens": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**Seuils de rang en TOKENS, figés au déploiement**"
+  },
+  "rank_thresholds_in_supply_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**points de base de l'offre** (5 / 25 / 100 / 375 bps"
+  },
+  "received_measured_beneficiary": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "Le montant reçu se mesure **côté bénéficiaire**"
+  },
+  "revshare_cap_bps": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "rev-share USDG = 30 % − rakeback du filleul"
+  },
+  "round_for_rule": {
+   "file": "contracts/src/SpinTickets.sol",
+   "quote": "return uint64((target - GENESIS + PERIOD - 1) / PERIOD + 1); // ceil((target-G)/P) + 1"
+  },
+  "set_spdx_token_once": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**appelable une seule fois par le Safe, puis\n  verrouillée définitivement**"
+  },
+  "settle_open_to_all": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "`settleDraw` **ouverte à tous**"
+  },
+  "single_claim": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**Une seule fonction `claim`**"
+  },
+  "spdx_decimals": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "| **Décimales** | **18** sur 44/44 |"
+  },
+  "spdx_total_supply": {
+   "file": "contracts/rewards/rapports/reconnaissance.md",
+   "quote": "**1 000 000 000 × 10¹⁸ exactement**"
+  },
+  "split_bps": {
+   "file": "sim/tokenomics.py",
+   "quote": "SPLIT = {\"burn\": 0.40, \"draw\": 0.15, \"rakeback\": 0.10, \"tresor\": 0.35}"
+  },
+  "stake_reverts_on_fee": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**révèle**\n  (`FeeOnTransferNotSupported`) si le delta ≠ `amount`"
+  },
+  "sweep_from_funding": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "les 90 jours courent depuis le **versement**"
+  },
+  "unstake_credits_delta": {
+   "file": "contracts/rewards/REWARDS_SPEC.md",
+   "quote": "**créditent le delta réellement transféré** : on ne bloque\n  JAMAIS la sortie"
+  },
+  "usdg_decimals": {
+   "file": "contracts/vault/VAULT_SPEC.md",
+   "quote": "USDG : 6 décimales."
+  }
+ },
+ "spdx_decimals": 18,
+ "spdx_total_supply": 1000000000000000000000000000,
+ "split_bps": {
+  "burn": 4000,
+  "draw": 1500,
+  "rakeback": 1000,
+  "tresor": 3500
+ },
+ "usdg_decimals": 6,
+ "week_id_max": 18446744073709551615
+}

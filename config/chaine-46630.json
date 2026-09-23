@@ -1,0 +1,22 @@
+{
+ "_doc": "Paramètres PUBLICS de la chaîne surveillée par l'instance b. Rien ici n'est un secret : ce sont des adresses, des numéros de bloc et un hash de transaction, tous lisibles par n'importe qui sur la chaîne. Les DEUX seules valeurs secrètes du montage (URL RPC et clé d'attestation) passent par les secrets GitHub et n'apparaissent dans aucun fichier du dépôt. Ce fichier est la RÉFÉRENCE de la garde de chaîne : le nœud doit annoncer ce chain_id, et l'amorçage doit avoir été fait sur lui.",
+ "format": 1,
+ "reseau": "Robinhood Chain testnet",
+ "chain_id": 46630,
+ "rewards": "0xb1545499edc98c1621d09f3e586db7c6e5e7b70d",
+ "deploy_block": 122618784,
+ "tx_deploiement": "0xf6464f1c17aed88bcb73c1385150fcae9ed0308d3ac7a0bcec872263e100e625",
+ "multicall3": "0xca11bde05977b3631167028862be2a173976ca11",
+ "tables_base_url": "https://spindex.family/tables",
+ "publish_deadline_s": 300,
+ "window_alert_s": 720,
+ "window_need_s": 480,
+ "multicall_batch": 4000,
+ "week_unposted_alert_days": 7,
+ "draw_unsettled_alert_days": 3,
+ "_provenance": {
+  "rewards / deploy_block / tx_deploiement": "registre d'amorçage de l'instance a (~/.local/state/spindex-testnet/veilleur-a/amorcage.json), lui-même écrit après les quatre preuves de veilleur/amorcage.py",
+  "seuils de temps": "identiques à ceux de l'instance a (~/.config/spindex/testnet/veilleur-a.env) ; window_need_s absent de ce .env, donc le défaut 480 s du paquet s'y applique et il est écrit ici en clair",
+  "tables_base_url": "l'instance a vise un dossier LOCAL de la machine keeper, ce que b ne peut évidemment pas lire. b vise l'emplacement PUBLIÉ. C'est une différence VOULUE : elle rend b capable de constater qu'une table n'est pas publiée là où le public la cherche, ce que a ne peut pas voir."
+ }
+}

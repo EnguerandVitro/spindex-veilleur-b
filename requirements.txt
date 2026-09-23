@@ -1,0 +1,30 @@
+# Dépendances de l'instance b — ÉPINGLÉES, avec leurs empreintes.
+#
+# Le veilleur n'utilise qu'une seule bibliothèque tierce : `cryptography`, pour Ed25519. Tout le
+# reste est la bibliothèque standard — c'est un choix de la famille, et il fait que la surface
+# d'approvisionnement de ce montage tient en trois lignes.
+#
+# `--require-hashes` (posé dans le workflow) : pip REFUSE d'installer une roue dont l'empreinte
+# diffère. Sans lui, épingler une version ne protège de rien — une version peut être republiée, et un
+# miroir peut mentir. Avec lui, l'empreinte est la borne, et elle vient d'ici, pas de l'index.
+#
+# `--no-deps` (posé aussi dans le workflow) : pip ne va pas chercher de dépendance qui ne serait pas
+# écrite ici. Les trois qui suivent sont l'arbre complet, résolu et vérifié le 2026-09-23 :
+#     cryptography → cffi → pycparser
+#
+# Les empreintes sont celles des roues **manylinux x86_64 / CPython 3.12**, c'est-à-dire exactement
+# ce que sert le runner `ubuntu-24.04`. Sur une autre plateforme, pip refusera — et c'est voulu : un
+# repli silencieux sur une compilation locale serait une dépendance non vérifiée de plus.
+#
+# Mise à jour : relancer sur une machine de confiance
+#     pip3 download --only-binary=:all: --python-version 3.12 \
+#          --platform manylinux2014_x86_64 "cryptography==<version>" -d /tmp/roues
+#     sha256sum /tmp/roues/*.whl
+# puis reporter ici, et **rejouer le banc** avant de pousser.
+
+cryptography==44.0.3 \
+    --hash=sha256:192ed30fac1728f7587c6f4613c29c584abdc565d7417c13904708db10206645
+cffi==2.1.1 \
+    --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992

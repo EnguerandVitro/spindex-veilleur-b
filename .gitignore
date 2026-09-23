@@ -1,0 +1,24 @@
+# Rien de secret, rien d'état, rien de généré ne doit entrer dans ce dépôt.
+# Les vraies barrières sont ailleurs (les secrets vivent chez GitHub, jamais dans un fichier),
+# mais une seconde barrière ne coûte rien — et KE#52 rappelle que `.env` seul ne couvre pas
+# `.env.bak`, `.env.local` et consorts.
+.env
+.env.*
+# Carve-out (KE#52) : le MODÈLE de configuration du paquet scellé est un artefact du scellé — il est
+# dans SCEAU.json, donc un clone qui ne l'aurait pas ferait ÉCHOUER la vérification de la copie. Il ne
+# contient aucune valeur, seulement des noms de variables et des explications.
+!veilleur/.env.exemple
+*.hex
+*.pub
+*.pem
+*.key
+id_*
+
+__pycache__/
+*.pyc
+
+# arbres de travail du workflow (créés dans le runner, jamais commités)
+/publication/
+/travail/
+/lot/
+/etatwt/
