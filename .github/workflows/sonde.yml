@@ -1,8 +1,0 @@
-name: sonde
-on:
-  workflow_dispatch:
-jobs:
-  sonde:
-    runs-on: ubuntu-24.04
-    steps:
-      - run: echo ok

@@ -182,3 +182,6 @@ jobs:
               print(f"::error title=veilleur b {m['cle']}::{m['texte']}")
           sys.exit(1)
           PYEOF
+
+# (ligne ajoutée pour forcer l’enregistrement du workflow : GitHub n’avait pas indexé ce fichier
+#  lors du tout premier envoi qui a créé le dépôt — le contenu, lui, était valide.)
