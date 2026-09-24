@@ -1,33 +1,33 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 123498037,
+  "bloc": 123600826,
   "code": null,
-  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 2.07 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 2.30 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "cd1efb7a327ecb6ef8a026ff2cf5850ece505f4ad9d542c1b89f2e42275d9338",
   "format": 1,
   "instance": "b",
-  "passe": 4,
+  "passe": 5,
   "resultat": "ok",
   "rpc": {
-   "appels": 211,
+   "appels": 212,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790230171
+  "ts": 1790250078
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 3,
+ "compteur_precedent": 4,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-24T06:09:31Z",
- "juge_le_ts": 1790230171,
+ "juge_le": "2026-09-24T11:41:18Z",
+ "juge_le_ts": 1790250078,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 2.07 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 122618784, il y a 2.30 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
  "tache": "passe",
  "verdict": "VERT"
