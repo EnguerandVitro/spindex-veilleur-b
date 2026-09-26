@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "passe",
- "ts": 1790434969,
- "passe": 20,
+ "ts": 1790447738,
+ "passe": 21,
  "bloc": null,
  "resultat": "erreur",
  "code": "section_en_echec:lecture",
  "detail": "sections en échec : lecture, burn, racines",
  "empreinte": "cd1efb7a327ecb6ef8a026ff2cf5850ece505f4ad9d542c1b89f2e42275d9338",
  "rpc": {
-  "appels": 17,
+  "appels": 71,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
