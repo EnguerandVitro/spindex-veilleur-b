@@ -38,18 +38,29 @@ qu'un témoin absent.
 6. **La copie du code vient de la machine du keeper.** `outils/resynchroniser.sh` est lancé là-bas par
    un humain. Le code est public et son empreinte est vérifiable des deux côtés, donc ce n'est pas un
    canal de données — mais ce n'est pas non plus une indépendance totale, et il faut le savoir.
-7. **Les actions tierces utilisées (`actions/checkout`, `actions/upload-artifact`) sont épinglées par
-   étiquette majeure, pas par empreinte de commit.** Une étiquette peut être redirigée. Épingler les
-   empreintes est le prochain geste (section « Entretien »).
+7. **Les actions tierces (`actions/checkout` v4.4.0, `actions/upload-artifact` v4.6.2) sont épinglées
+   par empreinte de commit depuis le 2026-09-28** — mais leur CODE reste celui de tiers, et le runner
+   aussi. Le jeton d'écriture n'est posé qu'à l'étape « Publier » (`persist-credentials: false`) :
+   pendant que le code qui lit la chaîne tourne, aucun identifiant n'est sur le disque.
 
 ---
 
 ## Ce que cette copie embarque
 
-`veilleur/` est une copie du paquet scellé `backend/veilleur`, prise dans la **release EN SERVICE**
-(`12517992…`, scellée le 2026-09-23 à 17:38 UTC), et **pas** dans l'arbre de travail de la famille.
-C'est délibéré : `b` doit exécuter le code que `a` exécute, sinon une divergence entre les deux se
-lirait comme un désaccord sur la chaîne alors que ce serait un désaccord sur le code.
+`veilleur/` est une copie du paquet scellé `backend/veilleur`.
+
+> **État au 2026-09-28, après redéploiement.** La copie est la release EN SERVICE de `a`
+> (`5c670aa9…`, construite le 2026-09-28T17:22:15Z) sur le scellé de la famille du 2026-09-28T14:39:34Z
+> (`FIGE.json` `7ee8fc0c…`), qui porte la séparation de domaine C-4 et la signature anvil de
+> `bloc_inconnu`. `resynchroniser.sh` rend **ACCORD** : `a` et `b` publient la même empreinte
+> `54606ab6…`. `config/chaine-46630.json` vise le `SpindexRewards` post-C-4 `0x34ebcae3…` (bloc
+> 125 796 406), écrit par `outils/maj_chaine.py` depuis `deploiement-46630-20260928T165955Z.json`,
+> preuves sur la chaîne comprises. Au premier job, l'état restauré de l'ancien contrat est archivé
+> et `b` ré-amorce.
+
+La règle d'exploitation reste : `b` doit exécuter le code que `a` exécute, pris dans une copie scellée,
+sinon une divergence entre les deux se lirait comme un désaccord sur la chaîne alors que ce serait un
+désaccord sur le code.
 
 La famille livre souvent. **Après chaque livraison, relancer `outils/resynchroniser.sh`** (sur la
 machine du keeper), rejouer le banc, committer, pousser. Le script fait lui-même la vérification
@@ -68,20 +79,63 @@ de chaque job**, avant toute lecture de la chaîne) :
 | 3 | `empreinte_sources()` | le code réellement exécuté | **publiée en service par l'instance `a`** |
 
 L'ancrage 3 est le seul vérifiable de l'extérieur : l'instance `a` écrit la **même** valeur dans son
-`health.json` et dans chacun de ses battements, à chaque passe. Aujourd'hui :
+`health.json` et dans chacun de ses battements, à chaque passe. Valeur de la copie (scellé du
+2026-09-28 ; `a` publie la même, release `5c670aa9…`) :
 
 ```
-f91addd8b65c6a61df63706146a69bcc7848fff1eec920a6555bdde906aab17d
+54606ab6fbd2b9f395366d4f7b09c2ab16aaaec7ccb0136cf333151644b393e0
 ```
 
 Deux instances qui ne portent pas cette même empreinte n'exécutent pas le même code, et leur accord
 — comme leur désaccord — ne voudrait rien dire.
+
+| 4 | `outils/conformite.py vérifier` | une copie (et son scellé) **périmée** | **du contrat**, calculée par `cast` |
+
+L'ancrage 4 existe parce que les trois premiers ont laissé passer un incident réel : du 2026-09-24 au
+2026-09-28, la copie portait la convention merkle d'**avant** la séparation de domaine (lot sécurité
+C-4) **avec son `FIGE.json` d'avant** — les deux s'accordaient parfaitement, et `b` calculait des
+feuilles que le contrat redéployé n'acceptera jamais. `config/vecteurs-convention.json` porte des
+feuilles dorées (`claim` et `draw`, 4 vecteurs chacun, dont l'ancre chiffrée de la red team) calculées
+par `cast` — implémentation indépendante de keccak et d'`abi.encode` — depuis les préimages d'étiquette
+**lues dans `contracts/src/SpindexRewards.sol`**. Chaque job exige que la copie les retrouve au bit
+près avant de lire la chaîne ; une copie sans étiquette est nommée comme la collision F03.
+
+Sur la machine du keeper, deux contrôles de plus (banc, jambe G, et `resynchroniser.sh`) :
+`contrôler-générateur` (le fichier de vecteurs est un fichier GÉNÉRÉ : il est confronté à ce que son
+générateur produit **aujourd'hui** depuis la source — si le contrat ou la convention changent, il
+rougit, KE#148) et `recouper-source` (copie, famille scellée `backend/veilleur` et autorité amont
+`contracts/rewards` portent la même convention, le scellé de la famille est valide, et la copie porte
+**le `FIGE.json` de la famille d'aujourd'hui**, KE#137). **Ne jamais régénérer les vecteurs sans avoir
+resynchronisé la copie et lu le diff des vecteurs** : régénérer seul, c'est rafraîchir l'épingle
+machinalement (KE#147).
 
 S'ajoutent les contrôles de **couverture** (KE#111) : le sceau refuse un manifeste vide, refuse un
 intrus sous `veilleur/` (un `.py` de plus à la racine **déplacerait** `empreinte_sources()`), et exige
 que **tout** fichier exécuté ait été croisé avec le scellé de la famille.
 
 ---
+
+## Le fournisseur RPC de `b` : dRPC, et le profil qui va avec
+
+Le secret `SPINDEX_B_RPC_URL` pointe **dRPC** (fournisseur indépendant de celui de `a`). dRPC refuse toute
+plage de journaux de plus de **101 blocs**, en HTTP 400, avec un message qui annonce 10 000 (rapport
+veilleur §13). `config/chaine-46630.json` déclare donc `"rpc_profil": "drpc"`, et `outils/preparer.py`
+l'écrit en `SPINDEX_RPC_PROFIL` dans le `.env`. Le domaine de l'URL secrète est confronté aux profils
+**mesurés** du paquet scellé : URL dRPC sans ce profil, ou profil que l'URL contredit, c'est un ARRÊT avant
+toute lecture (l'URL n'est jamais imprimée). Le banc (jambe H) le prouve par comportement, contre un faux
+dRPC local (ports 18570-18579) : avec le profil, 1 000 blocs lus sans un refus ; sans lui, refus.
+
+## Au redéploiement : UNE commande pour la configuration de chaîne
+
+```bash
+python3 -B outils/maj_chaine.py --manifeste ~/stockslot/contracts/deploy/manifestes/deploiement-46630-<date>.json
+```
+
+Elle refuse un manifeste dont les contrôles ne sont pas tous réussis, puis prouve **sur la chaîne** (RPC public,
+lecture seule) le reçu de création, le bloc et l'empreinte du code de `SpindexRewards`, et **en dernier** que
+le contrat est postérieur à C-4 (`TAG_CLAIM()` / `TAG_DRAW()` = étiquettes des vecteurs dorés). L'ancien déploiement (`…041522Z`, pré-C-4) y était refusé sur ce seul dernier point ; le
+redéploiement du 2026-09-28 (`…165955Z`) passe les quatre preuves. `--a-blanc` vérifie sans écrire. Au premier job
+qui suit, `executer.sh` archive l'état restauré de l'ancien contrat et ré-amorce (jambe I du banc).
 
 ## La cadence, et pourquoi ce n'est pas 5 minutes
 
@@ -241,7 +295,7 @@ fournie : une signature vérifiée contre la clé que le document transporte n'a
 
 Trois choses à regarder dans la sortie :
 - `signé_par` — c'est bien votre clé, celle notée à l'étape 2 ;
-- `empreinte_sources` — c'est bien `fbc8179779abd441…`, la même que celle publiée par `a` ;
+- `empreinte_sources` — c'est bien `54606ab6fbd2b9f3…` (valeur de `SCEAU.json`), la même que celle publiée par `a` ;
 - `jugement` — `VERT`, ou `ROUGE` avec ses motifs nommés.
 
 Et si vous changez un octet de `courant/health.json`, la commande doit **refuser**. Faites-le une
@@ -286,8 +340,9 @@ from cryptography.hazmat.primitives import serialization as s
 print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()).hex())
 " > /tmp/cle-banc.hex
 
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 6 situations, 12 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 10 cassures : chaque garde est-elle portante ?
+# BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 9 situations, 27 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 23 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin
@@ -311,8 +366,9 @@ rougira jamais), puis une par garde. `python3 -B` et purge des `__pycache__` ent
 - **Après chaque livraison de la famille `veilleur`** : lancer `outils/resynchroniser.sh` sur la
   machine du keeper, rejouer les deux scripts du banc, committer en nommant la release, pousser, et
   prévenir le coordinateur (la surveillance compare les empreintes des deux instances).
-- **Épingler les actions par empreinte de commit** plutôt que par étiquette majeure
-  (`actions/checkout@<sha>`), pour fermer la limite n°7.
+- **Mettre à jour les actions épinglées** : relire le diff de l'action, puis remplacer l'empreinte
+  (`gh api repos/actions/<action>/git/ref/tags/<vX.Y.Z>`, déréférencer si l'objet est un `tag`) et le
+  commentaire de version, dans le même commit.
 - **La branche `attestations` grossit** d'environ vingt kilo-octets par passage. La remettre à plat
   est un geste **humain**, une fois par an, jamais une poussée en force automatique — elle effacerait
   l'histoire que la branche existe pour garder.

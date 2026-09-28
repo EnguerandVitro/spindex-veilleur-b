@@ -20,7 +20,18 @@ DOSSIER="${2:?ARRET : dossier attendu}"
 git worktree remove --force "$DOSSIER" 2>/dev/null || true
 rm -rf "$DOSSIER"
 
-if git fetch origin "$BRANCHE" >/dev/null 2>&1; then
+# « la branche n'existe pas » et « je n'ai pas pu joindre le dépôt » ne doivent PAS se confondre : un
+# fetch en échec lu comme « branche neuve » repartirait d'une branche orpheline et perdrait l'état
+# (registre d'amorçage compris). `ls-remote --exit-code` rend 2 si et seulement si la branche est absente.
+# Aucun identifiant requis : le dépôt est public (checkout en persist-credentials: false).
+git ls-remote --exit-code --heads origin "$BRANCHE" >/dev/null 2>&1
+LS=$?
+if [ "$LS" != 0 ] && [ "$LS" != 2 ]; then
+  echo "ARRET : dépôt distant injoignable (git ls-remote code $LS) — ni branche existante ni branche neuve prouvée." >&2
+  exit 2
+fi
+if [ "$LS" = 0 ]; then
+  git fetch origin "$BRANCHE" >/dev/null 2>&1 || { echo "ARRET : la branche $BRANCHE existe mais son fetch échoue." >&2; exit 2; }
   git worktree add "$DOSSIER" "origin/$BRANCHE" >/dev/null 2>&1 || exit 2
   ( cd "$DOSSIER" && git checkout -B "$BRANCHE" "origin/$BRANCHE" >/dev/null 2>&1 ) || exit 2
   echo "arbre $DOSSIER prêt sur « $BRANCHE » (branche existante, histoire conservée)"

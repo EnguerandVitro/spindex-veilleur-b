@@ -26,7 +26,7 @@ CLE="${2:?ARRET : fichier de cle de banc attendu}"
 SAUVE="$TRAVAIL/sauvegarde"
 export PYTHONDONTWRITEBYTECODE=1
 
-A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py)
+A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh)
 
 empreinte_arbre() {
   ( cd "$RACINE" && for f in "${A_SAUVER[@]}"; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1 )
@@ -185,6 +185,171 @@ s = s.replace("def verifier(lot_dir, ancre):\n    attendue = charger_ancre(ancre
               "        ancre = _j.load(open(_o.path.join(lot_dir, SIGNATURE), encoding=\"utf-8\"))[\"clé_publique\"]  # CASSURE\n"
               "    attendue = charger_ancre(ancre)")
 open(p, "w", encoding="utf-8").write(s)
+'
+
+echo
+echo "--- 10 : conformité MAXIMALE — conformite.py rend 0 quoi qu il arrive"
+casser conformite_maximale "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    a = ap.parse_args(argv)\n", "    a = ap.parse_args(argv)\n    return 0  # CASSURE\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 11 : la copie n est plus comparée aux feuilles dorées"
+casser feuille_doree "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("elif calc != v[\"feuille\"]:", "elif False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 12 : la feuille SANS étiquette n est plus nommée comme la collision F03"
+casser nom_F03 "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if calc == v[\"feuille_sans_etiquette\"]:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 13 : le fichier de vecteurs n est plus confronté à son générateur (KE#148)"
+casser generateur "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if present != regenere:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 14 : l autorité amont n est plus recoupée avec la copie et la famille"
+casser amont "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if len(set(emp.values())) != 1:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 15 : une copie périmée (FIGE.json ancien) n est plus vue (KE#137)"
+casser fraicheur "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if fige_copie != fige_famille:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 16 : un domaine de paiement sans vecteur passe à vide (KE#111)"
+casser couverture "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("vides = [d for d in DOMAINES_PAIEMENT if not compte.get(d)]", "vides = []")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 17 : des vecteurs d une AUTRE convention sont acceptés"
+casser convention_des_vecteurs "conformite" outils/conformite.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if lue != annoncee:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 18 : le job ne vérifie plus la conformité avant de lire la chaîne"
+casser job_conformite "conformite" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("\"${PY[@]}\" \"$RACINE/outils/conformite.py\" vérifier", "true")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 19 : preparer.py n écrit plus SPINDEX_RPC_PROFIL dans le .env"
+casser profil_ecrit "profil" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("] + ([(\"SPINDEX_RPC_PROFIL\", profil)] if profil else []))", "] + [])")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 20 : une URL dRPC sans profil déclaré n est plus refusée"
+casser profil_garde "profil" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if detectes and declare != detectes[0]:", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 21 : le faux dRPC accepte toute plage (le banc du profil ne mesurerait plus rien)"
+casser faux_fidele "profil" outils/banc_fournisseur.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("ok = (b - a) <= SPAN_ACCEPTE - 1", "ok = True")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 22 : l état d un autre déploiement n est plus archivé au redéploiement"
+casser redeploiement "redeploiement" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("mv \"$ETAT/etat\" \"$ARCH\" && mkdir -p \"$ETAT/etat\"", "true")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 23 : une poussée en échec redevient un step VERT muet (KE#105)"
+casser poussee_muette "publication" outils/pousser.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("[ \"$POUSSE\" = oui ] ||", "true ||")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 24 : un origin injoignable redevient une branche NEUVE orpheline"
+casser branche_injoignable "publication" outils/branche.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if [ \"$LS\" != 0 ] && [ \"$LS\" != 2 ]; then", "if false; then")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
 '
 
 restaurer

@@ -67,10 +67,13 @@ jobs:
     timeout-minutes: 45          # un amorçage à froid relit toute la chaîne ; une passe tiède dure quelques secondes
     steps:
       - name: Dépôt
-        uses: actions/checkout@v4
+        # épinglé par EMPREINTE (limite n°7 du README) : une étiquette peut être redirigée, un commit non.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0 (= v4 au 2026-09-28)
         with:
           fetch-depth: 1
-          persist-credentials: true   # la poussée de `attestations` réutilise cet accès
+          # AUCUN identifiant sur le disque pendant que le code qui lit la chaîne tourne : le jeton n'est
+          # posé que dans l'étape « Publier », sur l'arbre `publication`, juste avant la poussée.
+          persist-credentials: false
 
       - name: Dépendances épinglées
         # Python 3.12 est celui du runner ubuntu-24.04 : pas d'action tierce de plus pour l'installer.
@@ -110,7 +113,7 @@ jobs:
 
       - name: Artefact (filet, même en échec)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2 (= v4 au 2026-09-28)
         with:
           name: veilleur-b-${{ github.run_id }}-${{ github.run_attempt }}
           path: lot
@@ -119,6 +122,8 @@ jobs:
 
       - name: Publier sur la branche `attestations`
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
           if [ ! -f lot/MANIFESTE.json ]; then
@@ -151,17 +156,14 @@ jobs:
           # le vérificateur voyage avec les lots : un lecteur n'a besoin de rien d'autre
           cp outils/verifier_lot.py publication/verifier_lot.py
 
-          cd publication
-          git config user.name  "veilleur-b"
-          git config user.email "veilleur-b@users.noreply.github.com"
-          git add -A
-          git commit -q -m "veilleur b — $HORO — $VERDICT" || echo "rien à committer"
-          for essai in 1 2 3; do
-            git push origin HEAD:attestations && break
-            echo "poussée refusée (essai $essai) — je récupère et je recommence"
-            git fetch origin attestations && git rebase origin/attestations || true
-            sleep 5
-          done
+          git -C publication config user.name  "veilleur-b"
+          git -C publication config user.email "veilleur-b@users.noreply.github.com"
+          git -C publication add -A
+          git -C publication commit -q -m "veilleur b — $HORO — $VERDICT" || echo "rien à committer"
+          # le jeton n'est posé qu'ICI (persist-credentials: false au checkout)
+          git -C publication remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          # échoue (1) si le lot n'est pas publié après 3 essais — jamais un step vert muet (KE#105)
+          bash outils/pousser.sh publication
 
       - name: Barrière — un contrôle rouge fait échouer le job
         if: always()
