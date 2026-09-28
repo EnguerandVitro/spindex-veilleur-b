@@ -307,6 +307,37 @@ class LecteurJournaux:
             if not de <= _bn(lg) <= a:
                 raise RepriseError(f"ARRÊT : journal au bloc {_bn(lg)} hors de la plage demandée [{de}, {a}].")
 
+    def _relier_a_la_chaine_verifiee(self, lgs, fin_seg):
+        """Fournisseurs par RÔLE : les journaux viennent d'un fournisseur, les BORNES (tête, finalized, hash
+        des blocs) de l'autre. Sans ce lien, un fournisseur de journaux EN RETARD (plage rendue vide) ou
+        servant une AUTRE chaîne au même chainId serait figé « vérifié » — et le différentiel D, relu chez
+        le même fournisseur, ne pourrait pas le contredire. Deux jambes, avant toute écriture (KE#130) :
+
+        (a) la tête du fournisseur des journaux a ATTEINT la fin du segment ;
+        (b) chaque bloc portant des journaux : TOUS les `blockHash` servis == le hash de ce bloc lu chez le
+            fournisseur de l'ÉTAT. Coût nul en appels : le bloc est lu de toute façon pour son horodatage.
+
+        Limite, écrite : un bloc où le fournisseur des journaux OMET des journaux sans rien en rendre n'est
+        pas couvert par (b) — seule une seconde source de journaux le verrait.
+        Rend les horodatages {bloc: ts} des blocs à journaux."""
+        tete_j = int(self.client.must_journaux("eth_blockNumber", []), 16)
+        if tete_j < fin_seg:
+            raise RepriseError(
+                f"ARRÊT : le fournisseur des JOURNAUX annonce la tête {tete_j}, en RETARD sur la fin du segment "
+                f"à figer ({fin_seg}) : une plage qu'il n'a pas atteinte serait figée vide. Rien n'est figé.")
+        ts = {}
+        for bn in sorted({_bn(x) for x in lgs}):
+            b = self.client.block(bn)
+            h = (b.get("hash") or "").lower()
+            servis = {(x.get("blockHash") or "").lower() for x in lgs if _bn(x) == bn}
+            if servis != {h}:
+                raise RepriseError(
+                    f"ARRÊT : bloc {bn} — les journaux servis portent blockHash {sorted(servis)}, le "
+                    f"fournisseur de l'ÉTAT lit {h} : journaux d'une AUTRE chaîne (ou d'un embranchement). "
+                    f"Rien n'est figé.")
+            ts[bn] = int(b["timestamp"], 16)
+        return ts
+
     # ------------------------------------------------------------------ lecture
 
     def lire(self, head, fin_bn, fin_hash, topics=None, ecrire=True):
@@ -392,7 +423,10 @@ class LecteurJournaux:
                 # Sans cela, compte à rebours, racines et reconstruction relisent à CHAQUE passe un
                 # horodatage par événement — un second coût qui croît sans borne, caché derrière le
                 # premier.
-                ts = {bn: self.client.block_timestamp(bn) for bn in sorted({_bn(x) for x in lgs})}
+                if hasattr(self.client, "must_journaux"):
+                    ts = self._relier_a_la_chaine_verifiee(lgs, fin_seg)
+                else:
+                    ts = {bn: self.client.block_timestamp(bn) for bn in sorted({_bn(x) for x in lgs})}
                 self.horodatages_figes.update(ts)
                 neuf.extend(lgs)
                 if not cede:

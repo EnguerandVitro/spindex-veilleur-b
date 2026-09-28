@@ -86,8 +86,9 @@ class Settings:
     """Réglages du veilleur. Tout vient de `.env` ; rien n'a de valeur par défaut qui masquerait un oubli,
     SAUF les chemins internes au dépôt, qui ne sont pas des secrets."""
 
+    # `SPINDEX_RPC_URL` n'est plus dans cette liste : il est exigé en mode « un fournisseur pour tout »,
+    # et INTERDIT en mode « un fournisseur par rôle » (voir `_fournisseurs`). L'un des deux, jamais aucun.
     REQUIRED = (
-        "SPINDEX_RPC_URL",
         "SPINDEX_CHAIN_ID",
         "SPINDEX_REWARDS_ADDR",
         "SPINDEX_REWARDS_DEPLOY_BLOCK",
@@ -97,7 +98,7 @@ class Settings:
     )
 
     def __init__(self, env):
-        self.rpc_url = env["SPINDEX_RPC_URL"]
+        self._fournisseurs(env)
         self.chain_id = int(env["SPINDEX_CHAIN_ID"])
         self.rewards = _addr(env["SPINDEX_REWARDS_ADDR"], "SPINDEX_REWARDS_ADDR")
         self.deploy_block = int(env["SPINDEX_REWARDS_DEPLOY_BLOCK"])
@@ -135,7 +136,7 @@ class Settings:
         # plafonne à 50 000 blocs ; dRPC à 101 blocs, avec un message qui en annonce 10 000.
         # Un nom de profil inconnu est un ARRÊT qui NOMME les profils connus (KE#73) : un repli mou
         # sur le défaut ferait tourner le veilleur avec les hypothèses d'un autre fournisseur.
-        self.rpc_profil = env.get("SPINDEX_RPC_PROFIL") or None
+        # (En mode par rôle, `rpc_profil` est celui du rôle JOURNAUX : c'est lui qui fixe la tranche.)
         if self.rpc_profil is not None and self.rpc_profil not in PROFILS:
             raise ConfigError(
                 f"ARRÊT : SPINDEX_RPC_PROFIL vaut « {self.rpc_profil} », qui n'est pas un profil "
@@ -160,6 +161,14 @@ class Settings:
                (PROFILS[self.rpc_profil].get("relance_transitoire") if self.rpc_profil else None))
         try:
             self.rpc_relance_transitoire = verifier_relance(rel)
+            if self.rpc_roles is not None:
+                pe = self.rpc_roles["etat"]["profil"]
+                self.rpc_roles["etat"]["relance"] = (
+                    self.rpc_relance_transitoire if all(env_rel)
+                    else verifier_relance(PROFILS[pe].get("relance_transitoire")))
+                self.rpc_roles["etat"]["span"] = PROFILS[pe]["span_logs_max"]
+                self.rpc_roles["journaux"].update({"span": self.rpc_max_log_span,
+                                                   "relance": self.rpc_relance_transitoire})
         except RpcRefused as e:
             raise ConfigError(str(e)) from e
         # Profondeur maximale sondée par la dichotomie de fenêtre. Sur un nœud d'ARCHIVE, c'est elle
@@ -202,9 +211,61 @@ class Settings:
         # Dossier des battements (un fichier PAR TÂCHE, BATTEMENT.md v1.2) et de health.json.
         self.battement_dir = env.get("SPINDEX_VEILLEUR_BATTEMENT_DIR") or self.state_dir
 
+    ROLES = ("journaux", "etat")
+
+    def _fournisseurs(self, env):
+        """Un fournisseur pour TOUT (`SPINDEX_RPC_URL` [+ `SPINDEX_RPC_PROFIL`]), ou un par RÔLE :
+        `SPINDEX_RPC_URL_JOURNAUX` + `SPINDEX_RPC_PROFIL_JOURNAUX` et `SPINDEX_RPC_URL_ETAT` +
+        `SPINDEX_RPC_PROFIL_ETAT`, les QUATRE, avec des profils MESURÉS, sans défaut (KE#105).
+
+        Mélanger les deux formes, ou n'en déclarer qu'une partie, est un ARRÊT : un rôle à moitié déclaré
+        serait complété par l'autre fournisseur en silence — exactement ce que la séparation doit empêcher.
+        `fournisseurs_publics` ne porte que des HÔTES : l'URL d'un fournisseur contient souvent sa clé.
+        """
+        cles = {r: (f"SPINDEX_RPC_URL_{r.upper()}", f"SPINDEX_RPC_PROFIL_{r.upper()}") for r in self.ROLES}
+        poses = [k for r in self.ROLES for k in cles[r] if env.get(k)]
+        if not poses:
+            if not env.get("SPINDEX_RPC_URL"):
+                raise ConfigError("ARRÊT : aucun fournisseur RPC : poser SPINDEX_RPC_URL (un pour tout), ou les "
+                                  "quatre SPINDEX_RPC_URL_JOURNAUX / _PROFIL_JOURNAUX / _URL_ETAT / _PROFIL_ETAT.")
+            self.rpc_url = env["SPINDEX_RPC_URL"]
+            self.rpc_profil = env.get("SPINDEX_RPC_PROFIL") or None
+            self.rpc_roles = None
+            self.fournisseurs_publics = {"tout": hote(self.rpc_url)}
+            return
+        manquants = [k for r in self.ROLES for k in cles[r] if not env.get(k)]
+        if manquants:
+            raise ConfigError(f"ARRÊT : fournisseurs par rôle à MOITIÉ déclarés — manquent {manquants}. Les "
+                              f"quatre clés se posent ensemble : un rôle non déclaré serait servi en silence "
+                              f"par l'autre fournisseur.")
+        melange = [k for k in ("SPINDEX_RPC_URL", "SPINDEX_RPC_PROFIL") if env.get(k)]
+        if melange:
+            raise ConfigError(f"ARRÊT : {melange} posé(s) EN PLUS des fournisseurs par rôle : lequel ferait "
+                              f"foi serait une question d'ordre de lecture. Retirer l'un des deux modes.")
+        self.rpc_roles = {}
+        for r in self.ROLES:
+            url, profil = env[cles[r][0]], env[cles[r][1]]
+            if profil not in PROFILS:
+                raise ConfigError(f"ARRÊT : {cles[r][1]} vaut « {profil} », qui n'est pas un profil MESURÉ "
+                                  f"({', '.join(sorted(PROFILS))}).")
+            self.rpc_roles[r] = {"url": url, "profil": profil}
+        self.rpc_url = None
+        self.rpc_profil = self.rpc_roles["journaux"]["profil"]
+        self.fournisseurs_publics = {r: hote(self.rpc_roles[r]["url"]) for r in self.ROLES}
+
     @classmethod
     def load(cls, path=None):
         return cls(load_env(path, required=cls.REQUIRED))
+
+
+def hote(url):
+    """L'HÔTE seul d'une URL de fournisseur — jamais le chemin, la requête ni les identifiants, qui portent
+    souvent une clé d'API. C'est la seule forme publiable dans un battement ou un `health.json`."""
+    from urllib.parse import urlparse
+    h = urlparse(str(url)).hostname
+    if not h:
+        raise ConfigError("ARRÊT : URL de fournisseur sans hôte lisible (la valeur n'est pas imprimée).")
+    return h.lower()
 
 
 def verifier_besoin(besoin_s, publish_deadline_s, window_alert_s):

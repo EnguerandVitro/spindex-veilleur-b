@@ -95,15 +95,21 @@ def garde_chaine(client, settings, exiger_amorcage):
     tâches planifiées l'exigent (`AmorcageAbsent` sinon) ; l'amorçage lui-même et les vérifications à la main
     comparent au registre s'il existe.
     """
-    lu = client.chain_id()
+    # Un fournisseur par rôle : CHACUN est confronté à la configuration et à l'amorçage. Un seul rôle sur
+    # la mauvaise chaîne suffit à tout refuser — et le motif nomme le rôle (`chaine_inattendue`, pas une
+    # panne RPC anonyme).
+    ids = client.chain_ids() if hasattr(client, "chain_ids") else {"nœud": client.chain_id()}
+    lu = next(iter(ids.values()))
     configure = int(settings.chain_id)
     reg = lire_registre(settings.state_dir)
     amorce = None if reg is None else reg["chain_id"]
     ecarts = []
-    if lu != configure:
-        ecarts.append(f"le nœud annonce chainId={lu}, la configuration {configure}")
-    if amorce is not None and amorce != lu:
-        ecarts.append(f"le nœud annonce chainId={lu}, l'amorçage a été fait sur {amorce}")
+    for role, v in ids.items():
+        nom = "le nœud" if role == "nœud" else f"le fournisseur « {role} »"
+        if v != configure:
+            ecarts.append(f"{nom} annonce chainId={v}, la configuration {configure}")
+        if amorce is not None and amorce != v:
+            ecarts.append(f"{nom} annonce chainId={v}, l'amorçage a été fait sur {amorce}")
     if ecarts:
         raise ChaineInattendue(
             "ARRÊT chaine_inattendue : " + " ; ".join(ecarts) + ". Aucune lecture, aucune attestation : "

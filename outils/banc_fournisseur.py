@@ -79,7 +79,12 @@ def client_depuis_env(chemin_env, url):
     from veilleur.config import Settings, load_env
     from veilleur.rpc import client_depuis
     env = load_env(chemin_env, required=Settings.REQUIRED)
-    env["SPINDEX_RPC_URL"] = url
+    # le faux dRPC sert le rôle JOURNAUX (et, s'il y a deux rôles, l'état aussi : rien ne doit sortir d'ici)
+    if env.get("SPINDEX_RPC_URL_JOURNAUX"):
+        env["SPINDEX_RPC_URL_JOURNAUX"] = url
+        env["SPINDEX_RPC_URL_ETAT"] = url
+    else:
+        env["SPINDEX_RPC_URL"] = url
     return client_depuis(Settings(env))
 
 
@@ -117,8 +122,8 @@ def main(argv=None):
         # 2. le .env tel qu'écrit par preparer.py
         with open(a.env, encoding="utf-8") as fh:
             lignes = fh.read().splitlines()
-        if not any(l.startswith("SPINDEX_RPC_PROFIL=") for l in lignes):
-            motifs.append("profil_absent: le .env écrit par preparer.py ne porte pas SPINDEX_RPC_PROFIL")
+        if not any(l.startswith(("SPINDEX_RPC_PROFIL=", "SPINDEX_RPC_PROFIL_JOURNAUX=")) for l in lignes):
+            motifs.append("profil_absent: le .env écrit par preparer.py ne porte pas de profil pour les journaux")
         r_avec = lire(client_depuis_env(a.env, url))
         if r_avec[0] != 0 or r_avec[2] > SPAN_ACCEPTE:
             motifs.append(f"profil_non_portant: {r_avec[0]} refus sur {r_avec[1]} requêtes, "
@@ -126,7 +131,11 @@ def main(argv=None):
 
         # 3. témoin négatif : le même .env SANS la ligne de profil se fait refuser
         with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False, encoding="utf-8") as t:
-            t.write("\n".join(l for l in lignes if not l.startswith("SPINDEX_RPC_PROFIL=")) + "\n")
+            # « sans profil » : un seul fournisseur, sans profil (une déclaration par rôle ne peut pas omettre
+            # le sien — elle serait refusée à la configuration, ce qui ne mesurerait rien ici)
+            sans = [l for l in lignes if not l.startswith(("SPINDEX_RPC_PROFIL", "SPINDEX_RPC_URL_"))]
+            sans.append(f"SPINDEX_RPC_URL='{url}'")
+            t.write("\n".join(sans) + "\n")
         os.chmod(t.name, 0o600)
         try:
             r_sans = lire(client_depuis_env(t.name, url))

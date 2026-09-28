@@ -18,6 +18,8 @@
 #                          (jamais un step vert muet, KE#105) ; branche.sh distingue « absente » d « injoignable »
 #   K  cache contredit     un segment figé falsifié (sha recalculé) : le différentiel D le contredit ->
 #                          journaux ÉCARTÉS hors de etat/ avant publication, ARRET (2) nommé
+#   L  fuite               une VRAIE passe dont l URL secrète porte un marqueur : aucun fichier écrit ou publié
+#                          (lot, état, battement, health, derniere-passe) ne le contient
 #   I  redéploiement       la configuration désigne un autre contrat que l état restauré : état ARCHIVÉ,
 #                          ré-amorçage (refusé ici, le contrat désigné étant faux)          attendu ARRET (2)
 #
@@ -37,7 +39,7 @@ RPC_VRAI="${BANC_RPC:-https://rpc.testnet.chain.robinhood.com}"
 RPC_AUTRE="${BANC_RPC_AUTRE:-https://rpc.mainnet.chain.robinhood.com}"
 # Filtre de jambes : les cassures synthétiques ne rejouent que la (ou les) jambe(s) qu elles visent,
 # pour que « rouge sur le test NOMMÉ » veuille dire quelque chose. Par défaut : toutes.
-JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit}"
+JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit fuite}"
 # Racine du PROJET (arbre source + frozen.py) : les contrôles de conformité à la SOURCE en ont besoin.
 PROJET="${BANC_PROJET:-$(dirname "$RACINE")}"
 voulue() { [[ " $JAMBES " == *" $1 "* ]]; }
@@ -370,6 +372,12 @@ SPINDEX_B_RPC_URL="https://robinhood-testnet.drpc.org" SPINDEX_B_ATTEST_KEY_HEX=
 if [ "$code" = 0 ]; then
   python3 -B "$RACINE/outils/banc_fournisseur.py" --env "$H/prod/veilleur-b.env" >> "$H/H2.log" 2>&1 || code=$?
 fi
+# rôles séparés : journaux = le secret, état = le RPC public de la configuration, et AUCUN mode mono en plus
+if [ "$code" = 0 ] && ! { grep -q "^SPINDEX_RPC_URL_JOURNAUX='https://robinhood-testnet.drpc.org'" "$H/prod/veilleur-b.env" \
+     && grep -q "^SPINDEX_RPC_URL_ETAT='https://rpc.testnet.chain.robinhood.com'" "$H/prod/veilleur-b.env" \
+     && ! grep -q "^SPINDEX_RPC_URL=" "$H/prod/veilleur-b.env"; }; then
+  code=9; echo "rôles non séparés dans le .env écrit" >> "$H/H2.log"
+fi
 if [ "$code" = 0 ] && grep -qF "PROFIL PORTANT" "$H/H2.log"; then
   echo "  [profil:H2] OK — $(grep -F "PROFIL PORTANT" "$H/H2.log")"; VERTS=$((VERTS + 1))
 else
@@ -491,6 +499,21 @@ if [ "$code" = 3 ]; then
   echo "  [cache_contredit] OK — l état partiel n a plus rien à republier"; VERTS=$((VERTS + 1))
 else
   echo "  [cache_contredit] ÉCHEC — etat_partiel rend $code (attendu 3)"; ECHECS+=("cache_contredit: republiable"); ROUGES=$((ROUGES + 1))
+fi
+fi
+
+if voulue fuite; then
+echo
+echo "--- L : l URL secrète ne sort dans AUCUN fichier écrit ou publié (fichiers, pas déclaration — KE#129)"
+MARQ="fuitebanc$(date +%s%N)"
+jambe fuite 0 "$CONFIG_BANC" "${RPC_VRAI}/?cle=${MARQ}" "$(cat "$CLE")"
+N="$(find "$TRAVAIL/fuite/etat" "$TRAVAIL/fuite/lot" -type f | wc -l)"
+if [ "$N" -ge 5 ] && [ -f "$TRAVAIL/fuite/etat/health.json" ] && [ -f "$TRAVAIL/fuite/etat/battement-passe.json" ] \
+   && [ -f "$TRAVAIL/fuite/etat/derniere-passe.json" ] && ! grep -rqF "$MARQ" "$TRAVAIL/fuite/etat" "$TRAVAIL/fuite/lot" "$TRAVAIL/fuite.log"; then
+  echo "  [fuite] OK — $N fichiers relus, marqueur absent partout"; VERTS=$((VERTS + 1))
+else
+  echo "  [fuite] ÉCHEC — marqueur trouvé ou couverture insuffisante ($N fichiers) : $(grep -rlF "$MARQ" "$TRAVAIL/fuite/etat" "$TRAVAIL/fuite/lot" 2>/dev/null | head -3 | tr '\n' ' ')"
+  ECHECS+=("fuite"); ROUGES=$((ROUGES + 1))
 fi
 fi
 echo

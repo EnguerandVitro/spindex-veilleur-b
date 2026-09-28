@@ -193,9 +193,22 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
     poser_cle(cle_path, _secret("SPINDEX_B_ATTEST_KEY_HEX"))
     url = _secret("SPINDEX_B_RPC_URL")
     profil = profil_rpc(url, c.get("rpc_profil"))
+    # Un fournisseur par RÔLE (arbitrage 2026-09-28) : le secret sert les JOURNAUX ; l'ÉTAT va au
+    # fournisseur public déclaré dans la configuration. Sans `rpc_etat`, un seul fournisseur pour tout.
+    etat = c.get("rpc_etat")
+    if etat is not None:
+        if not (isinstance(etat, dict) and etat.get("url") and etat.get("profil")):
+            raise PreparerError(f"ARRÊT : `rpc_etat` de {config_path} doit porter `url` ET `profil`.")
+        if profil is None:
+            raise PreparerError("ARRÊT : fournisseurs par rôle, mais aucun profil pour les JOURNAUX "
+                                "(`rpc_profil`) : un rôle ne se déclare pas à moitié.")
+        profil_rpc(etat["url"], etat["profil"])          # même garde de domaine que pour le secret
+        fournisseurs = [("SPINDEX_RPC_URL_JOURNAUX", url), ("SPINDEX_RPC_PROFIL_JOURNAUX", profil),
+                        ("SPINDEX_RPC_URL_ETAT", etat["url"]), ("SPINDEX_RPC_PROFIL_ETAT", etat["profil"])]
+    else:
+        fournisseurs = [("SPINDEX_RPC_URL", url)] + ([("SPINDEX_RPC_PROFIL", profil)] if profil else [])
 
-    ecrire_env(env_path, [
-        ("SPINDEX_RPC_URL", url),
+    ecrire_env(env_path, fournisseurs + [
         ("SPINDEX_CHAIN_ID", int(c["chain_id"])),
         ("SPINDEX_REWARDS_ADDR", c["rewards"]),
         ("SPINDEX_REWARDS_DEPLOY_BLOCK", int(c["deploy_block"])),
@@ -229,7 +242,7 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
         ("SPINDEX_MULTICALL_BATCH", int(c.get("multicall_batch") or 4000)),
         ("SPINDEX_WEEK_UNPOSTED_ALERT_DAYS", int(c.get("week_unposted_alert_days") or 7)),
         ("SPINDEX_DRAW_UNSETTLED_ALERT_DAYS", int(c.get("draw_unsettled_alert_days") or 3)),
-    ] + ([("SPINDEX_RPC_PROFIL", profil)] if profil else []))
+    ])
 
     # Le `.env` est relu par L'AUDITEUR DU PAQUET SCELLÉ, pas par moi : ce qui compte est ce que voit
     # le CONSOMMATEUR (extension de KE#107 vérifiée le 2026-09-21).

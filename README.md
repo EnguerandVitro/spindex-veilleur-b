@@ -43,6 +43,18 @@ qu'un témoin absent.
    aussi. Le jeton d'écriture n'est posé qu'à l'étape « Publier » (`persist-credentials: false`) :
    pendant que le code qui lit la chaîne tourne, aucun identifiant n'est sur le disque.
 
+8. **L'indépendance de `b` porte sur les JOURNAUX, PAS sur l'ÉTAT** (arbitrage du 2026-09-28, KE#127 :
+   un verdict nomme son périmètre). dRPC gratuit ne sert plus l'état à un bloc numéroté ; `b` lit donc ses
+   journaux chez dRPC (secret `SPINDEX_B_RPC_URL`) et **toutes ses lectures d'état — têtes, blocs, sondes de
+   fenêtre, `strandedBurn`, tout `eth_call` à un bloc — chez le RPC officiel public, qui est celui de `a`**
+   (`config/chaine-46630.json` → `rpc_etat`). Un feu vert de `b` recoupe donc indépendamment les
+   événements, le cache et les racines merkle reconstruites ; il ne recoupe PAS ce que le nœud officiel
+   dit de l'état — un nœud officiel menteur tromperait `a` et `b` du même coup sur l'état. `health.json`
+   et chaque battement publient les deux HÔTES par rôle (`fournisseurs`), jamais une URL — vérifié sur les
+   FICHIERS écrits (banc de la famille, et jambe L du banc de `b`), pas sur la déclaration. Mesuré le
+   2026-09-28 depuis la machine du keeper : passe VERTE, 286 appels, fenêtre ≈ 1 590 s. **Non vérifié :
+   que le RPC officiel réponde depuis un runner GitHub** (le premier job le dira ; un refus y sera nommé).
+
 ---
 
 ## Ce que cette copie embarque
@@ -130,6 +142,20 @@ croissante (5 essais, 2 → 30 s, déclarés dans le profil `drpc`, sans défaut
 puis échec nommé. Et si l'amorçage échoue quand même, l'étape « Publier » sauve l'**état partiel**
 (`outils/etat_partiel.sh`, commit non signé qui le dit) : le job suivant reprend au dernier segment figé
 (un segment tous les ~200 appels) au lieu de repartir du bloc de déploiement.
+
+**⚠️ dRPC gratuit ne sert plus l'état par numéro de bloc (mesuré le 2026-09-28, run 36475098966).**
+`eth_call` à tête−k refusé pour k = 0 à 8 000 (`Unknown state. First available state is 1`, 8/8), alors
+que `latest` répond et que sa tête n'est pas en retard sur le nœud officiel. Les journaux (et donc
+l'amorçage) passent ; la section `burn` et la sonde de fenêtre, qui lisent l'état à un bloc ÉPINGLÉ, ne
+peuvent pas passer — le paquet le dit désormais (`etat_indisponible`, « le nœud n'est pas utilisable »).
+Mesuré le même jour sur les deux autres fournisseurs : officiel ≥ 6 000 blocs (≈ 940 s), publicnode
+entre 100 et 1 000 blocs (16 à 156 s, sous le besoin de 480 s). Aucun fournisseur indépendant mesuré ne
+convenait à l'ÉTAT : **résolu le 2026-09-28 par l'option 2 (un fournisseur par rôle) — voir la limite
+n°8** en tête de ce fichier. Conséquence à garder en tête : les BORNES de lecture des journaux (tête,
+`finalized`) et les HASH de blocs viennent du nœud OFFICIEL (KE#130 : la borne vient de la source, pas
+du sujet) ; les journaux de dRPC n'entrent dans le cache qu'après avoir prouvé que dRPC a atteint la fin
+du segment et que leurs `blockHash` sont ceux que lit le nœud officiel. Ce que ce lien ne couvre PAS : un
+bloc pour lequel dRPC OMETTRAIT des journaux sans rien rendre — il faudrait une seconde source de journaux.
 
 **Ce que la reprise n'économise PAS.** Elle ne sauve que la jambe C de l'amorçage (la relecture vers le
 cache). La jambe D — le différentiel complet, qui relit TOUT depuis le bloc de déploiement sans cache, et
@@ -362,8 +388,8 @@ print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryp
 " > /tmp/cle-banc.hex
 
 # BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 10 situations, 42 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 29 cassures : chaque garde est-elle portante ?
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 11 situations, 44 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 30 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin

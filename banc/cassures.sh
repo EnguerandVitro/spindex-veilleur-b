@@ -287,12 +287,12 @@ open(p, "w", encoding="utf-8").write(s2)
 '
 
 echo
-echo "--- 19 : preparer.py n écrit plus SPINDEX_RPC_PROFIL dans le .env"
+echo "--- 19 : preparer.py n écrit plus le profil des JOURNAUX dans le .env"
 casser profil_ecrit "profil" outils/preparer.py '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s2 = s.replace("] + ([(\"SPINDEX_RPC_PROFIL\", profil)] if profil else []))", "] + [])")
+s2 = s.replace("(\"SPINDEX_RPC_PROFIL_JOURNAUX\", profil),", "")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '
@@ -392,6 +392,17 @@ import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 s2 = s.replace("  exit 1\nfi\nexit 0", "  exit 0\nfi\nexit 0")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 29 : la configuration déclare deux rôles, preparer.py n en écrit qu un (l état retombe sur dRPC)"
+casser roles_separes "profil" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    if etat is not None:", "    if False:")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '

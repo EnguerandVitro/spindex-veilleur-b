@@ -57,6 +57,7 @@ CLASSES = frozenset({
     "debit",                    # limitation de débit                  -> ATTENDRE, jamais découper
     "entete_refuse",            # refus au niveau du frontal HTTP      -> ARRÊT (en-tête à corriger)
     "delai_fournisseur",        # le fournisseur n'a pas répondu à temps -> RELANCE BORNÉE, jamais découper
+    "etat_indisponible",        # l'état n'est servi à AUCUNE profondeur -> pas d'état ici (fournisseur inapte)
 })
 
 # Les SEULES classes qui autorisent à redécouper une plage de journaux.
@@ -69,7 +70,7 @@ CLASSES_DECOUPABLES = frozenset({"plage_trop_large", "resultats_trop_nombreux"})
 CLASSES_TRANSITOIRES = frozenset({"delai_fournisseur"})
 
 # Classes qui signifient « cet état n'est pas lisible ici » pour la sonde de fenêtre.
-CLASSES_SANS_ETAT = frozenset({"bloc_inconnu", "etat_elague"})
+CLASSES_SANS_ETAT = frozenset({"bloc_inconnu", "etat_elague", "etat_indisponible"})
 
 
 class SignatureAmbigue(RuntimeError):
@@ -93,6 +94,7 @@ def _s(classe, motif, exemple, fournisseur, code, http, mesure):
 CAPTURES = {"capture-2026-09-24": "mesures/rpc-fournisseurs-2026-09-24.json",
             "capture-anvil-2026-09-28": "mesures/rpc-anvil-2026-09-28.json",
             "run-github-36469251579": "mesures/rpc-drpc-408-2026-09-28.json",
+            "run-github-36475098966": "mesures/rpc-drpc-etat-2026-09-28.json",
             "atelier-0": None}
 
 _LE_2026_09_24 = ("capture-2026-09-24",
@@ -105,6 +107,10 @@ _ANVIL_2026_09_28 = ("capture-anvil-2026-09-28",
 _RUN_36469251579 = ("run-github-36469251579",
                     "journal du run GitHub Actions 36469251579 (instance b sur dRPC), 2026-09-28T19:03Z, "
                     "pendant le ré-amorçage : eth_getLogs [125820242,125820342] (mesures/rpc-drpc-408-2026-09-28.json)")
+_RUN_36475098966 = ("run-github-36475098966",
+                    "journal du run GitHub Actions 36475098966 (instance b sur dRPC, 2026-09-28T19:53Z : "
+                    "strandedBurn@125860733 et sondes de fenêtre) + mesure directe du même jour, RPC publics "
+                    "sans clé (mesures/rpc-drpc-etat-2026-09-28.json)")
 _ATELIER_0 = ("atelier-0",
               "atelier 0, le 21 septembre 2026 — non re-mesuré depuis : provoquer une limitation de "
               "débit exige de marteler un nœud public, ce que le veilleur ne fait pas pour se tester")
@@ -148,6 +154,15 @@ SIGNATURES = (
     _s("bloc_inconnu", r"^BlockOutOfRangeError: block height is \d+ but requested was \d+$",
        "BlockOutOfRangeError: block height is 5 but requested was 1005", "anvil", -32602, 200,
        _ANVIL_2026_09_28),
+
+    # ---- l'état n'est servi à AUCUNE profondeur ----------------------------------------------
+    # dRPC, plan gratuit, 2026-09-28 : `eth_call` / `eth_getBalance` / `eth_getStorageAt` à un bloc
+    # NUMÉROTÉ sont refusés dès la tête et à toute profondeur mesurée (0 à 50 000 blocs, 8/8 dans la
+    # capture), alors que `latest` répond. Ce n'est ni un retard (sa tête est égale ou EN AVANCE sur le
+    # nœud officiel) ni un élagage à une profondeur : l'état par numéro n'est pas servi. Le message
+    # (« First available state is 1 ») contredit ce qu'il fait ; on le classe par ce qu'il FAIT.
+    _s("etat_indisponible", r"^Unknown state\. First available state is \d+$",
+       "Unknown state. First available state is 1", "drpc", 27, 400, _RUN_36475098966),
 
     # ---- le fournisseur n'a pas répondu à temps (TRANSITOIRE) ---------------------------------
     # dRPC, plan gratuit, HTTP 408, code 30, sur une plage de 101 blocs (sous la limite mesurée) :
@@ -255,9 +270,12 @@ PROFILS = {
         "span_logs_max": 101,
         "pourquoi_span": "MESURÉ par dichotomie, trois fois : 101 blocs acceptés, 102 refusés. "
                          "Le message du fournisseur annonce 10 000 — il ment, et on ne le croit pas.",
-        "archive": True,
-        "profondeur_etat_blocs": "aucune limite trouvée jusqu'à 100 000 000 de blocs "
-                                 "(nœud d'ARCHIVE) — la fenêtre s'y mesure en MINORANT",
+        "archive": False,
+        "profondeur_etat_blocs": "2026-09-24 : servi jusqu'à 100 000 000 de blocs (archive). "
+                                 "2026-09-28 : l'état par NUMÉRO de bloc n'est servi à AUCUNE profondeur, "
+                                 "tête comprise (`etat_indisponible`, 8/8 refus capturés, 0 sur 78 essais "
+                                 "entre 0 et 30 blocs) — INAPTE aux sections qui lisent l'état à un bloc "
+                                 "épinglé et à la sonde de fenêtre",
         "filtre_adresse_exige": False,
         "en_tetes": "Cloudflare : `Python-urllib/*` refusé en 403 « error code: 1010 ». "
                     "Les erreurs applicatives arrivent en HTTP 400, pas 200.",

@@ -319,6 +319,7 @@ def _executer(a, tache):
     rpc = {}
     tete = deploiement = cadence = None
     plan = plani = None
+    fournisseurs = None
     t0 = time.time()
     try:
         s = _settings()
@@ -326,6 +327,7 @@ def _executer(a, tache):
         # Lus AVANT le travail : `health.json` publie la cadence DÉCLARÉE par CETTE instance (5 min sous
         # systemd pour `a`, 15 min sur GitHub Actions pour `b`). Sans eux, il n'est pas réécrit du tout.
         plan, plani = s.planification, s.planificateur
+        fournisseurs = s.fournisseurs_publics
         if s.instance and s.instance != a.instance:
             raise ConfigError(f"ARRÊT : le .env déclare l'instance « {s.instance} », l'unité lance "
                               f"« {a.instance} ». Deux instances ne partagent ni état ni battement.")
@@ -337,6 +339,7 @@ def _executer(a, tache):
             rep, bloc, resultat, code, detail = _travail(tache, v, s)
         finally:
             rpc = dict(getattr(v.client, "stats", {}) or {})
+            rpc["fournisseurs"] = fournisseurs
         tete = bloc
         cadence = ((rep.get("fenêtre_état") or {}).get("cadence") or {}).get("blocs_par_s")
         rep["instance"] = a.instance
@@ -379,7 +382,7 @@ def _executer(a, tache):
                   "battement porte le motif.", file=sys.stderr)
         else:
             ecrire_health(bat.dossier, a.instance, tete=tete, deploiement=deploiement, cadence=cadence,
-                          planification=plan, planificateur=plani)
+                          planification=plan, planificateur=plani, fournisseurs=fournisseurs)
     except Exception as e:  # noqa: BLE001
         print(f"ÉCHEC health.json : {type(e).__name__} : {e}", file=sys.stderr)
         resultat, code = "erreur", "health_non_ecrit"

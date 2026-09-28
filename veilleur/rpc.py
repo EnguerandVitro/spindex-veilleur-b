@@ -161,6 +161,10 @@ def client_depuis(settings):
     """Construit le client AVEC les réglages du fournisseur configuré. Point unique : un appelant qui
     ferait `RpcClient(s.rpc_url)` tout seul retomberait sur les défauts du paquet, c'est-à-dire sur
     les hypothèses d'un AUTRE fournisseur que celui qui est en face."""
+    roles = getattr(settings, "rpc_roles", None)
+    if roles:
+        return ClientParRole(roles["journaux"], roles["etat"],
+                             user_agent=getattr(settings, "rpc_user_agent", USER_AGENT_DEFAUT))
     return RpcClient(
         settings.rpc_url,
         user_agent=getattr(settings, "rpc_user_agent", USER_AGENT_DEFAUT),
@@ -458,3 +462,69 @@ class RpcClient:
             if covered[i][0] != covered[i - 1][1] + 1:
                 raise RpcUnavailable("COUVERTURE NON CONTIGUË : tranches disjointes, contrôle abandonné.")
         return out, covered
+
+
+# Méthodes servies par le fournisseur des JOURNAUX quand les rôles sont séparés : ce qui permet de
+# reconstruire événements et racines indépendamment. TOUT le reste (état à un bloc, têtes, blocs,
+# code) va au fournisseur de l'ÉTAT — y compris la tête épinglée, pour que l'état soit lu à un bloc
+# que CE fournisseur possède.
+METHODES_JOURNAUX = frozenset({"eth_getLogs", "eth_getTransactionReceipt"})
+
+
+class ClientParRole(RpcClient):
+    """Deux fournisseurs, un par rôle. Le client lui-même EST celui des journaux (tranches, relances,
+    découpage selon SON profil) ; l'état passe par `self.etat`. Les compteurs sont PARTAGÉS : le
+    battement compte tous les appels, quel que soit le fournisseur.
+
+    `eth_chainId` est demandé aux DEUX : deux fournisseurs qui ne parlent pas de la même chaîne ne
+    forment pas un veilleur, ils en forment deux qui s'ignorent."""
+
+    def __init__(self, journaux, etat, user_agent=USER_AGENT_DEFAUT):
+        super().__init__(journaux["url"], user_agent=user_agent, max_log_span=journaux["span"],
+                         relance_transitoire=journaux["relance"])
+        self.etat = RpcClient(etat["url"], user_agent=user_agent, max_log_span=etat["span"],
+                              relance_transitoire=etat["relance"])
+        self.etat.stats = self.stats
+        self.stats["appels_journaux"] = 0
+        self.stats["appels_etat"] = 0
+
+    def chain_ids(self):
+        """`eth_chainId` de CHAQUE rôle, séparément — pour que la garde de chaîne nomme le rôle fautif."""
+        self.stats["appels_journaux"] += 1
+        self.stats["appels_etat"] += 1
+        return {"journaux": int(self._must_role(super().call, "eth_chainId"), 16),
+                "etat": int(self._must_role(self.etat.call, "eth_chainId"), 16)}
+
+    def must_journaux(self, method, params):
+        """Lecture EXPLICITE chez le fournisseur des JOURNAUX (hors routage) : sa tête, pour prouver qu'il
+        a bien atteint la plage qu'on fige. Une exception si elle échoue, jamais un résultat vide."""
+        self.stats["appels_journaux"] += 1
+        return self._must_role(lambda m, p: RpcClient.call(self, m, p), method, params)
+
+    @staticmethod
+    def _must_role(appel, methode, params=None):
+        r = appel(methode, params or [])
+        if r["kind"] != "ok":
+            raise RpcUnavailable(f"{methode} a échoué : {json.dumps(r, ensure_ascii=False)[:400]}")
+        return r["result"]
+
+    def call(self, method, params, timeout=None):
+        if method in METHODES_JOURNAUX:
+            self.stats["appels_journaux"] += 1
+            return super().call(method, params, timeout=timeout)
+        if method == "eth_chainId":
+            self.stats["appels_journaux"] += 1
+            self.stats["appels_etat"] += 1
+            a = super().call(method, params, timeout=timeout)
+            b = self.etat.call(method, params, timeout=timeout)
+            if a["kind"] != "ok":
+                return a
+            if b["kind"] != "ok":
+                return b
+            if str(a["result"]).lower() != str(b["result"]).lower():
+                return {"kind": "rpc_error", "code": None,
+                        "message": f"les deux fournisseurs annoncent des chaînes DIFFÉRENTES (journaux "
+                                   f"{a['result']}, état {b['result']}) : aucune lecture croisée possible"}
+            return a
+        self.stats["appels_etat"] += 1
+        return self.etat.call(method, params, timeout=timeout)

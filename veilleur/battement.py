@@ -209,6 +209,9 @@ class Battement:
             "rpc": {"appels": int(rpc.get("calls", 0)), "http_429": int(rpc.get("http_429", 0)),
                     "attente_429_s": float(rpc.get("attente_429_s", 0.0)),
                     "plages_découpées": int(rpc.get("plages_découpées", 0))},
+            # HÔTES par rôle (jamais d'URL : elle porte souvent une clé). `{"tout": …}` pour une instance
+            # à un seul fournisseur, `{"journaux": …, "etat": …}` quand les rôles sont séparés.
+            "fournisseurs": rpc.get("fournisseurs"),
         }
         _ecrire_json(self.path, doc)
         self.precedent += 1
@@ -303,7 +306,7 @@ def derive(tache, pire_s, cadence=CADENCE_MAX_BLOCS_S, *, plan_tache):
 
 
 def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, *,
-                  planification, planificateur):
+                  planification, planificateur, fournisseurs):
     """`health.json` : ce que la surveillance lit pour ne rien choisir elle-même (v1.2).
 
     `planification` et `planificateur` sont OBLIGATOIRES et sans défaut (KE#62) : ils viennent du `.env`
@@ -347,6 +350,9 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, 
         }
     doc = {"format": 1, "service": SERVICE, "instance": instance, "ts": int(time.time()),
            "empreinte": empreinte_sources(), "planificateur": planificateur,
+           # HÔTES par rôle, obligatoires et sans défaut (KE#62) : la surveillance doit savoir SUR QUOI
+           # porte l'indépendance d'une instance (journaux ? état ? les deux ?) — KE#127.
+           "fournisseurs": fournisseurs,
            "cadence_blocs_s": {"valeur": cad, "source": "max(mesure de la passe, 9,98 mesuré le 2026-09-21)"},
            "taches": taches}
     _ecrire_json(os.path.join(dossier, "health.json"), doc)
