@@ -102,6 +102,9 @@ jobs:
       - name: Veiller
         id: veille
         continue-on-error: true       # la publication doit avoir lieu même quand le jugement est ROUGE
+        # borné SOUS les 45 min du job : Artefact, Publier et Barrière doivent garder ≥ 8 min, sinon un
+        # amorçage long tuerait le job avant que l'état partiel ne soit sauvé
+        timeout-minutes: 36
         env:
           B_ETAT: ${{ github.workspace }}/travail
           B_LOT: ${{ github.workspace }}/lot
@@ -127,7 +130,21 @@ jobs:
         run: |
           set -e
           if [ ! -f lot/MANIFESTE.json ]; then
-            echo "::warning title=veilleur b::aucun lot signé à publier — le montage lui-même a refusé de démarrer, rien n'a été lu sur la chaîne"
+            # Pas de lot signé. Mais un amorçage interrompu a pu figer des segments de journaux : on les
+            # sauve (non signés, et le commit le dit) pour que le job suivant REPRENNE au lieu de repartir
+            # du bloc de déploiement. La barrière, plus bas, fait quand même échouer le job.
+            git -C publication config user.name  "veilleur-b"
+            git -C publication config user.email "veilleur-b@users.noreply.github.com"
+            EP=0
+            bash outils/etat_partiel.sh travail publication || EP=$?
+            case "$EP" in
+              0) git -C publication remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+                 bash outils/pousser.sh publication "état partiel"
+                 echo "::warning title=veilleur b::aucun lot signé — état PARTIEL d'amorçage sauvé pour reprise" ;;
+              3) echo "::warning title=veilleur b::aucun lot signé à publier — rien n'a été figé sur la chaîne" ;;
+              *) echo "::error title=veilleur b::sauvegarde de l'état partiel en ÉCHEC (code $EP) — le job suivant repartira du déploiement"
+                 exit 1 ;;
+            esac
             exit 0
           fi
           VERDICT="$(python3 -B -c 'import json;print(json.load(open("lot/JUGEMENT.json",encoding="utf-8"))["verdict"])')"
@@ -150,7 +167,8 @@ jobs:
             cp -r lot/. "publication/lots/$HORO-${GITHUB_RUN_ID}/"
           fi
 
-          # l'état de travail, pour l'exécution suivante
+          # l'état de travail, pour l'exécution suivante — jamais un fichier de type secret
+          bash outils/etat_sain.sh travail/etat
           rm -rf publication/etat && mkdir -p publication/etat
           cp -r travail/etat/. publication/etat/
           # le vérificateur voyage avec les lots : un lecteur n'a besoin de rien d'autre
@@ -163,13 +181,18 @@ jobs:
           # le jeton n'est posé qu'ICI (persist-credentials: false au checkout)
           git -C publication remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
           # échoue (1) si le lot n'est pas publié après 3 essais — jamais un step vert muet (KE#105)
-          bash outils/pousser.sh publication
+          bash outils/pousser.sh publication "lot"
 
       - name: Barrière — un contrôle rouge fait échouer le job
         if: always()
         run: |
           if [ ! -f lot/JUGEMENT.json ]; then
-            echo "::error title=veilleur b::aucun jugement produit : le montage n'a pas pu démarrer (sceau, secrets, configuration). Rien n'a été lu sur la chaîne."
+            if [ -f travail/ARRET.json ]; then
+              # amorçage interrompu : la chaîne A été lue, et le message doit le dire exactement
+              python3 -B -c 'import json;a=json.load(open("travail/ARRET.json",encoding="utf-8"));print("::error title=veilleur b amorçage::amorçage interrompu (code %s) — différentiel complet : %s ; journaux figés jusqu au bloc %s. Aucun lot signé ; l état partiel a été sauvé si des segments étaient figés, et le job suivant reprend là." % (a["code"], a["différentiel_D"] or "non atteint", a["journaux_figés_jusqu_à"]))'
+            else
+              echo "::error title=veilleur b::aucun jugement produit : le montage n'a pas pu démarrer (sceau, secrets, configuration). Rien n'a été lu sur la chaîne."
+            fi
             exit 1
           fi
           python3 - <<'PYEOF'

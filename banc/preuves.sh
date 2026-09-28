@@ -16,6 +16,8 @@
 #                          local (18570-79) lit 1 000 blocs sans refus, et SANS la ligne de profil il refuse
 #   J  publication         dépôt git LOCAL jetable : poussée réelle (0) ; origin invalide -> pousser.sh sort 1
 #                          (jamais un step vert muet, KE#105) ; branche.sh distingue « absente » d « injoignable »
+#   K  cache contredit     un segment figé falsifié (sha recalculé) : le différentiel D le contredit ->
+#                          journaux ÉCARTÉS hors de etat/ avant publication, ARRET (2) nommé
 #   I  redéploiement       la configuration désigne un autre contrat que l état restauré : état ARCHIVÉ,
 #                          ré-amorçage (refusé ici, le contrat désigné étant faux)          attendu ARRET (2)
 #
@@ -35,7 +37,7 @@ RPC_VRAI="${BANC_RPC:-https://rpc.testnet.chain.robinhood.com}"
 RPC_AUTRE="${BANC_RPC_AUTRE:-https://rpc.mainnet.chain.robinhood.com}"
 # Filtre de jambes : les cassures synthétiques ne rejouent que la (ou les) jambe(s) qu elles visent,
 # pour que « rouge sur le test NOMMÉ » veuille dire quelque chose. Par défaut : toutes.
-JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication}"
+JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit}"
 # Racine du PROJET (arbre source + frozen.py) : les contrôles de conformité à la SOURCE en ont besoin.
 PROJET="${BANC_PROJET:-$(dirname "$RACINE")}"
 voulue() { [[ " $JAMBES " == *" $1 "* ]]; }
@@ -419,7 +421,7 @@ jj() {   # jj <nom> <code attendu> <motif|-> <commande…>
 # J1 témoin positif : la branche existe -> worktree ; commit ; poussée RÉELLE -> 0, et le commit est chez origin
 jj J1-branche-existante 0 "branche existante" bash -c "cd '$J/depot' && bash '$RACINE/outils/branche.sh' attestations publication"
 ( cd "$J/depot/publication" && echo 1 > n && git -c user.email=b@banc -c user.name=banc commit -qam lot ) > /dev/null 2>&1
-B_ATTENTE_POUSSEE_S=0 jj J1-poussee 0 "lot publié" bash "$RACINE/outils/pousser.sh" "$J/depot/publication"
+B_ATTENTE_POUSSEE_S=0 jj J1-poussee 0 "lot publié" bash "$RACINE/outils/pousser.sh" "$J/depot/publication" "lot"
 if [ "$(git -C "$J/origine.git" log -1 --format=%s attestations 2>/dev/null)" = "lot" ]; then
   echo "  [publication:J1-chez-origin] OK — le lot est bien sur la branche distante"; VERTS=$((VERTS + 1))
 else
@@ -428,12 +430,68 @@ fi
 # J2 : origin invalide -> la poussée échoue 3 fois -> SORTIE 1 nommée (avant : step vert, rien publié)
 ( cd "$J/depot/publication" && echo 2 > n && git -c user.email=b@banc -c user.name=banc commit -qam lot2 ) > /dev/null 2>&1
 git -C "$J/depot/publication" remote set-url origin "$J/n-existe-pas.git"
-B_ATTENTE_POUSSEE_S=0 jj J2-origin-invalide 1 "lot NON publié sur attestations après 3 essais" bash "$RACINE/outils/pousser.sh" "$J/depot/publication"
+B_ATTENTE_POUSSEE_S=0 jj J2-origin-invalide 1 "lot NON publié sur attestations après 3 essais" bash "$RACINE/outils/pousser.sh" "$J/depot/publication" "lot"
 # J3 : branche.sh contre un origin injoignable -> ARRÊT (2), jamais une branche orpheline « neuve »
 jj J3-injoignable 2 "injoignable" bash -c "cd '$J/depot' && bash '$RACINE/outils/branche.sh' attestations publication3"
 # J4 : origin joignable, branche absente -> branche NEUVE (0)
 git -C "$J/depot" remote set-url origin "$J/origine.git"
 jj J4-branche-absente 0 "branche NEUVE" bash -c "cd '$J/depot' && bash '$RACINE/outils/branche.sh' autre-branche publication4"
+# J5 : amorçage interrompu -> l état PARTIEL (segments figés) est poussé, pour reprise au job suivant
+mkdir -p "$J/travail/etat/journaux"
+printf '{"segments":[{"de":1,"à":123}]}' > "$J/travail/etat/journaux/curseur.json"
+jj J5-branche 0 "branche existante" bash -c "cd '$J/depot' && bash '$RACINE/outils/branche.sh' attestations publication5"
+jj J5-etat-partiel 0 "figés jusqu'au bloc 123" bash -c "cd '$J/depot' && git -C publication5 config user.email b@banc && git -C publication5 config user.name banc && bash '$RACINE/outils/etat_partiel.sh' '$J/travail' publication5"
+B_ATTENTE_POUSSEE_S=0 jj J5-poussee 0 "état partiel publié" bash "$RACINE/outils/pousser.sh" "$J/depot/publication5" "état partiel"
+if git -C "$J/origine.git" show attestations:etat/journaux/curseur.json 2>/dev/null | grep -qF '"à":123' \
+   && git -C "$J/origine.git" log -1 --format=%s attestations | grep -qF "ÉTAT PARTIEL"; then
+  echo "  [publication:J5-chez-origin] OK — curseur partiel sur la branche distante, commit marqué ÉTAT PARTIEL"; VERTS=$((VERTS + 1))
+else
+  echo "  [publication:J5-chez-origin] ÉCHEC — état partiel absent de origin"; ECHECS+=("publication:J5-chez-origin"); ROUGES=$((ROUGES + 1))
+fi
+# J6 : rien de figé -> rien à sauver (3), pas un commit vide présenté comme un état
+rm -rf "$J/travail-vide" && mkdir -p "$J/travail-vide/etat"
+jj J6-rien-a-sauver 3 "rien à sauver" bash -c "cd '$J/depot' && bash '$RACINE/outils/etat_partiel.sh' '$J/travail-vide' publication5"
+# J7 : l arbre de publication n est pas inscriptible -> ÉCHEC (1), jamais confondu avec « rien à sauver » (3)
+chmod a-w "$J/depot/publication5"
+jj J7-non-inscriptible 1 "impossible" bash -c "cd '$J/depot' && bash '$RACINE/outils/etat_partiel.sh' '$J/travail' publication5"
+chmod u+w "$J/depot/publication5"
+# J8 : un fichier de type secret dans l état -> publication REFUSÉE (1), fichier nommé
+rm -rf "$J/travail-secret" && cp -r "$J/travail" "$J/travail-secret" && echo 00 > "$J/travail-secret/etat/attest-b.hex"
+jj J8-secret-refuse 1 "publication REFUSÉE" bash -c "cd '$J/depot' && bash '$RACINE/outils/etat_partiel.sh' '$J/travail-secret' publication5"
+fi
+
+if voulue cache_contredit; then
+echo
+echo "--- K : un cache CONTREDIT par la chaîne est écarté avant publication (sinon refus éternel)"
+K="$TRAVAIL/cache_contredit"; rm -rf "$K" && mkdir -p "$K"
+cp -r "$TRAVAIL/reference/etat" "$K/etat"
+rm -f "$K/etat/amorcage.json" "$K/etat/battement-passe.json"
+python3 -B - "$K/etat/journaux" <<'PYEOF'
+import hashlib, json, os, sys
+d = sys.argv[1]; cur = json.load(open(os.path.join(d, "curseur.json"), encoding="utf-8"))
+m = cur["segments"][-1]; p = os.path.join(d, m["fichier"])
+seg = json.load(open(p, encoding="utf-8"))
+assert seg["journaux"], "segment sans journal : rien à falsifier"
+seg["journaux"] = seg["journaux"][:-1]                      # un journal RETIRÉ du cache
+json.dump(seg, open(p, "w", encoding="utf-8"), ensure_ascii=False)
+m["n"] = len(seg["journaux"]); m["sha256"] = hashlib.sha256(open(p, "rb").read()).hexdigest()   # sha RECALCULÉ
+json.dump(cur, open(os.path.join(d, "curseur.json"), "w", encoding="utf-8"), ensure_ascii=False)
+PYEOF
+code=0
+B_ETAT="$K" B_LOT="$K/lot" B_TACHE=passe B_CONFIG="$CONFIG_BANC" SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" \
+  bash "$RACINE/outils/executer.sh" > "$K.log" 2>&1 || code=$?
+if [ "$code" = 2 ] && grep -qF "CONTREDIT" "$K.log" && [ ! -d "$K/etat/journaux" ] && ls -d "$K"/journaux-rejete-* >/dev/null 2>&1 \
+   && python3 -B -c 'import json,sys;a=json.load(open(sys.argv[1]));sys.exit(0 if a["différentiel_D"]=="DIVERGENT" else 1)' "$K/ARRET.json"; then
+  echo "  [cache_contredit] OK — D DIVERGENT, journaux écartés hors de etat/, ARRET (2) nommé"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — code $code (voir $K.log)"; ECHECS+=("cache_contredit: code $code"); ROUGES=$((ROUGES + 1))
+fi
+code=0; bash "$RACINE/outils/etat_partiel.sh" "$K" "$K/pub-inexistant" > "$K.ep.log" 2>&1 || code=$?
+if [ "$code" = 3 ]; then
+  echo "  [cache_contredit] OK — l état partiel n a plus rien à republier"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — etat_partiel rend $code (attendu 3)"; ECHECS+=("cache_contredit: republiable"); ROUGES=$((ROUGES + 1))
+fi
 fi
 echo
 # Assertion de COUVERTURE (KE#111) : un filtre de jambes mal écrit ne ferait rien tourner du tout et

@@ -20,7 +20,7 @@ import sys
 
 from .chainabi import SEL_TOTAL_SUPPLY
 from .fournisseurs import (PROFILS, PROFONDEUR_MAX_DEFAUT, SPAN_LOGS_DEFAUT, USER_AGENT_DEFAUT)
-from .rpc import RpcRefused, verifier_span, verifier_user_agent
+from .rpc import RpcRefused, verifier_relance, verifier_span, verifier_user_agent
 from .battement import PlanificationError
 from .battement import planificateur as _lire_planificateur
 from .battement import planification as _lire_planification
@@ -147,6 +147,20 @@ class Settings:
             self.rpc_user_agent = verifier_user_agent(
                 env.get("SPINDEX_RPC_USER_AGENT") or USER_AGENT_DEFAUT)
         except (RpcRefused, ValueError) as e:
+            raise ConfigError(str(e)) from e
+        # Relance des refus TRANSITOIRES du fournisseur : celle du PROFIL, ou les TROIS variables ensemble.
+        # Aucun défaut (KE#105) : sans déclaration, un refus transitoire est un ARRÊT qui nomme la clé.
+        env_rel = [env.get(k) for k in ("SPINDEX_RPC_RELANCE_ESSAIS", "SPINDEX_RPC_RELANCE_ATTENTE_INITIALE_S",
+                                        "SPINDEX_RPC_RELANCE_ATTENTE_MAX_S")]
+        if any(env_rel) and not all(env_rel):
+            raise ConfigError("ARRÊT : SPINDEX_RPC_RELANCE_ESSAIS, _ATTENTE_INITIALE_S et _ATTENTE_MAX_S se posent "
+                              "ENSEMBLE ou pas du tout : une relance à moitié déclarée serait complétée par un défaut.")
+        rel = ({"essais": env_rel[0], "attente_initiale_s": env_rel[1], "attente_max_s": env_rel[2]}
+               if all(env_rel) else
+               (PROFILS[self.rpc_profil].get("relance_transitoire") if self.rpc_profil else None))
+        try:
+            self.rpc_relance_transitoire = verifier_relance(rel)
+        except RpcRefused as e:
             raise ConfigError(str(e)) from e
         # Profondeur maximale sondée par la dichotomie de fenêtre. Sur un nœud d'ARCHIVE, c'est elle
         # qui devient le MINORANT rendu : elle doit donc rester au-dessus du besoin, sinon le

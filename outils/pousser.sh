@@ -6,10 +6,11 @@
 # VERT sans avoir rien publié — un veilleur muet qui se déclare en bonne santé (KE#105). Extrait ici,
 # il est exercé tel quel par le banc (jambe J), au lieu d'être une copie à la main du workflow.
 #
-#   outils/pousser.sh <arbre de la branche attestations>
+#   outils/pousser.sh <arbre de la branche attestations> <ce qui est publié, ex. « lot » ou « état partiel »>
 # Sortie 0 : poussé. Sortie 1 : NON publié après les essais (le job doit échouer).
 set -uo pipefail
 D="${1:?ARRET : arbre de travail attendu}"
+QUOI="${2:?ARRET : nature de la publication attendue (lot, état partiel) — le message doit dire ce qui est publié}"
 ESSAIS="${B_ESSAIS_POUSSEE:-3}"
 ATTENTE="${B_ATTENTE_POUSSEE_S:-5}"
 cd "$D" || exit 1
@@ -22,5 +23,5 @@ for essai in $(seq 1 "$ESSAIS"); do
   fi
   sleep "$ATTENTE"
 done
-[ "$POUSSE" = oui ] || { echo "::error title=veilleur b::lot NON publié sur attestations après $ESSAIS essais"; exit 1; }
-echo "lot publié sur attestations"
+[ "$POUSSE" = oui ] || { echo "::error title=veilleur b::$QUOI NON publié sur attestations après $ESSAIS essais"; exit 1; }
+echo "$QUOI publié sur attestations"

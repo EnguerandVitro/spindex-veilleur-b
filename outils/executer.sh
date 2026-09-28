@@ -32,6 +32,7 @@ PY=(python3 -B)
 
 echo "::: veilleur b — tâche « $TACHE »"
 mkdir -p "$ETAT/etat"
+rm -f "$ETAT/ARRET.json"     # marqueur d'amorçage interrompu : jamais hérité d'une exécution précédente
 
 # ---------------------------------------------------------------- 1. la copie est-elle le code scellé
 echo "--- 1/6 sceau de la copie"
@@ -84,8 +85,32 @@ echo "    compteur de passe avant exécution : $PRECEDENT"
 if [ ! -f "$ETAT/etat/amorcage.json" ]; then
   echo "--- 3/6 amorçage (registre absent : reconstruction depuis la chaîne)"
   TXD="$("${PY[@]}" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["tx_deploiement"])' "$CONFIG")"
-  ( cd "$RACINE" && "${PY[@]}" -m veilleur amorcer --instance b --tx-deploiement "$TXD" ) \
-    || { echo "ARRÊT : amorçage refusé — la chaîne de référence reste inconnue." >&2; exit 2; }
+  # Le rapport s'écrit HORS de `etat/` : `etat/` est publié tel quel, y compris après un échec.
+  RAPPORT="$ETAT/amorcage-rapport.json"
+  AM=0
+  ( cd "$RACINE" && "${PY[@]}" -m veilleur amorcer --instance b --tx-deploiement "$TXD" ) > "$RAPPORT" || AM=$?
+  cat "$RAPPORT"            # données publiques : le journal du job doit les montrer
+  if [ "$AM" != 0 ]; then
+    # Un cache que la chaîne a CONTREDIT (D = DIVERGENT) ne doit pas survivre : publié comme état partiel,
+    # chaque job suivant le reprendrait et refuserait POUR TOUJOURS. Il est écarté hors de `etat/`
+    # (conservé pour examen, jamais publié) ; le job suivant relira depuis le déploiement.
+    D_ETAT="$("${PY[@]}" -c 'import json,sys
+try: print((json.load(open(sys.argv[1],encoding="utf-8")).get("preuves") or {}).get("D_différentiel_complet",{}).get("état",""))
+except Exception: print("")' "$RAPPORT")"
+    if [ "$D_ETAT" = "DIVERGENT" ] && [ -d "$ETAT/etat/journaux" ]; then
+      REJ="$ETAT/journaux-rejete-$(date -u +%Y%m%dT%H%M%SZ)"
+      mv "$ETAT/etat/journaux" "$REJ"
+      echo "::error title=veilleur b::cache de journaux CONTREDIT par la chaîne (différentiel complet DIVERGENT) — écarté dans $REJ, non publié ; le prochain amorçage relira depuis le déploiement"
+    fi
+    FIGE="$("${PY[@]}" -c 'import json,sys
+try: s=json.load(open(sys.argv[1],encoding="utf-8"))["segments"]; print(s[-1]["à"] if s else "aucun")
+except Exception: print("aucun")' "$ETAT/etat/journaux/curseur.json")"
+    "${PY[@]}" -c 'import json,sys
+json.dump({"étape":"amorçage","code":int(sys.argv[2]),"différentiel_D":sys.argv[3] or None,"journaux_figés_jusqu_à":sys.argv[4]},
+          open(sys.argv[1],"w",encoding="utf-8"),ensure_ascii=False)' "$ETAT/ARRET.json" "$AM" "$D_ETAT" "$FIGE"
+    echo "ARRÊT : amorçage refusé (code $AM, différentiel D : ${D_ETAT:-non atteint}, journaux figés jusqu au bloc $FIGE) — la chaîne de référence reste inconnue." >&2
+    exit 2
+  fi
 else
   echo "--- 3/6 amorçage : registre présent, rien à faire"
 fi

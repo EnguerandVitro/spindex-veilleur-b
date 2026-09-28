@@ -56,10 +56,17 @@ CLASSES = frozenset({
     "etat_elague",              # état historique plus servi           -> pas d'état ici
     "debit",                    # limitation de débit                  -> ATTENDRE, jamais découper
     "entete_refuse",            # refus au niveau du frontal HTTP      -> ARRÊT (en-tête à corriger)
+    "delai_fournisseur",        # le fournisseur n'a pas répondu à temps -> RELANCE BORNÉE, jamais découper
 })
 
 # Les SEULES classes qui autorisent à redécouper une plage de journaux.
 CLASSES_DECOUPABLES = frozenset({"plage_trop_large", "resultats_trop_nombreux"})
+
+# Refus TRANSITOIRES du fournisseur : la même question, reposée plus tard, peut réussir. Remède :
+# relance BORNÉE à attente croissante, paramétrée dans le PROFIL (`relance_transitoire`), sans défaut
+# (KE#105) ; au-delà, échec BRUYANT et nommé. Ce n'est PAS une erreur de plage : la plage refusée
+# faisait 101 blocs, sous la limite mesurée — redécouper multiplierait les appels sans rien réparer.
+CLASSES_TRANSITOIRES = frozenset({"delai_fournisseur"})
 
 # Classes qui signifient « cet état n'est pas lisible ici » pour la sonde de fenêtre.
 CLASSES_SANS_ETAT = frozenset({"bloc_inconnu", "etat_elague"})
@@ -85,6 +92,7 @@ def _s(classe, motif, exemple, fournisseur, code, http, mesure):
 # d'ailleurs (et la phrase dit alors d'où, et pourquoi il n'a pas été re-mesuré).
 CAPTURES = {"capture-2026-09-24": "mesures/rpc-fournisseurs-2026-09-24.json",
             "capture-anvil-2026-09-28": "mesures/rpc-anvil-2026-09-28.json",
+            "run-github-36469251579": "mesures/rpc-drpc-408-2026-09-28.json",
             "atelier-0": None}
 
 _LE_2026_09_24 = ("capture-2026-09-24",
@@ -94,6 +102,9 @@ _ANVIL_2026_09_28 = ("capture-anvil-2026-09-28",
                      "capture directe le 28 septembre 2026, anvil 1.8.1 neuf sur 127.0.0.1:18571, deux "
                      "hauteurs (0 et 5) x trois avances x deux méthodes "
                      "(mesures/rpc-anvil-2026-09-28.json, outils/capture_anvil.py)")
+_RUN_36469251579 = ("run-github-36469251579",
+                    "journal du run GitHub Actions 36469251579 (instance b sur dRPC), 2026-09-28T19:03Z, "
+                    "pendant le ré-amorçage : eth_getLogs [125820242,125820342] (mesures/rpc-drpc-408-2026-09-28.json)")
 _ATELIER_0 = ("atelier-0",
               "atelier 0, le 21 septembre 2026 — non re-mesuré depuis : provoquer une limitation de "
               "débit exige de marteler un nœud public, ce que le veilleur ne fait pas pour se tester")
@@ -137,6 +148,13 @@ SIGNATURES = (
     _s("bloc_inconnu", r"^BlockOutOfRangeError: block height is \d+ but requested was \d+$",
        "BlockOutOfRangeError: block height is 5 but requested was 1005", "anvil", -32602, 200,
        _ANVIL_2026_09_28),
+
+    # ---- le fournisseur n'a pas répondu à temps (TRANSITOIRE) ---------------------------------
+    # dRPC, plan gratuit, HTTP 408, code 30, sur une plage de 101 blocs (sous la limite mesurée) :
+    # ce n'est pas la PLAGE qui est refusée, c'est le délai. Relance bornée, jamais de découpage.
+    _s("delai_fournisseur", r"^Request timeout on the \w+ plan, please upgrade to paid plan$",
+       "Request timeout on the free plan, please upgrade to paid plan", "drpc", 30, 408,
+       _RUN_36469251579),
 
     # ---- état historique élagué --------------------------------------------------------------
     # Deux formes DISTINCTES sur la même URL, selon le nœud qui répond (KE#133) : le balayage dédié
@@ -243,6 +261,11 @@ PROFILS = {
         "filtre_adresse_exige": False,
         "en_tetes": "Cloudflare : `Python-urllib/*` refusé en 403 « error code: 1010 ». "
                     "Les erreurs applicatives arrivent en HTTP 400, pas 200.",
+        # CHOIX d'exploitation (pas une mesure) : dRPC a rendu un 408 « Request timeout » après 2,1 s
+        # sur une plage de 101 blocs (run 36469251579). 5 relances à 2, 4, 8, 16, 30 s = 60 s au plus
+        # par appel, puis échec nommé. Un profil SANS cette clé ne relance pas : le refus transitoire
+        # y est un ARRÊT qui nomme la clé à déclarer (KE#105 — pas de défaut qui masquerait un oubli).
+        "relance_transitoire": {"essais": 5, "attente_initiale_s": 2.0, "attente_max_s": 30.0},
     },
 }
 

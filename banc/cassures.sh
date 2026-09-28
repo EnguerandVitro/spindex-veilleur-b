@@ -26,7 +26,7 @@ CLE="${2:?ARRET : fichier de cle de banc attendu}"
 SAUVE="$TRAVAIL/sauvegarde"
 export PYTHONDONTWRITEBYTECODE=1
 
-A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh)
+A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh outils/etat_partiel.sh outils/etat_sain.sh)
 
 empreinte_arbre() {
   ( cd "$RACINE" && for f in "${A_SAUVER[@]}"; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1 )
@@ -348,6 +348,50 @@ import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 s2 = s.replace("if [ \"$LS\" != 0 ] && [ \"$LS\" != 2 ]; then", "if false; then")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 25 : l état partiel d un amorçage interrompu n est plus sauvé (reprise du bloc de déploiement)"
+casser etat_partiel "publication" outils/etat_partiel.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("cp -r \"$TRAVAIL/etat/.\" \"$PUB/etat/\"", "true")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 26 : un cache CONTREDIT par D n est plus écarté (il serait republié et refusé pour toujours)"
+casser cache_contredit "cache_contredit" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("      mv \"$ETAT/etat/journaux\" \"$REJ\"\n", "      true\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 27 : un état non inscriptible redevient un succès muet"
+casser etat_non_inscriptible "publication" outils/etat_partiel.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("|| {\n  echo \"ARRET : copie de l état vers $PUB impossible\" >&2; exit 1; }", "|| true")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 28 : un fichier de type secret n empêche plus la publication"
+casser etat_sain "publication" outils/etat_sain.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("  exit 1\nfi\nexit 0", "  exit 0\nfi\nexit 0")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '

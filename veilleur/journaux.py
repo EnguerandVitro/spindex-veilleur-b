@@ -51,6 +51,11 @@ MAX_SEGMENTS = 64
 MODES = ("incrémental", "complet")
 # Rattrapage : un segment figé tous les 200 000 blocs (~200 appels `eth_getLogs`, ~5,6 h de chaîne).
 PAS_FIGEAGE = 200_000
+# ... mais « 200 appels » dépend du fournisseur : à 101 blocs par appel (dRPC, mesuré), 200 000 blocs
+# font ~1 980 appels et ~10 min — un amorçage de 49 000 blocs tenait en UN segment, écrit à la toute
+# fin, et un refus au milieu (run 36469251579) perdait TOUT. Le pas est donc aussi borné en APPELS :
+# au plus PAS_FIGEAGE_APPELS tranches du client entre deux écritures.
+PAS_FIGEAGE_APPELS = 200
 
 
 class RepriseError(RuntimeError):
@@ -376,8 +381,10 @@ class LecteurJournaux:
             n_segments_ecrits = 0
             cede = not ecrire
             debut = reprise
+            span = getattr(self.client, "max_log_span", None)
+            pas = min(PAS_FIGEAGE, PAS_FIGEAGE_APPELS * span) if span else PAS_FIGEAGE
             while debut <= fin_eff:
-                fin_seg = min(fin_eff, debut + PAS_FIGEAGE - 1)
+                fin_seg = min(fin_eff, debut + pas - 1)
                 lgs, c = self._get(debut, fin_seg)
                 self._controler(lgs, debut, fin_seg)
                 couv += c

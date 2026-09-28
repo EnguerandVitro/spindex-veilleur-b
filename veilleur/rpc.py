@@ -30,7 +30,7 @@ import time
 import urllib.error
 import urllib.request
 
-from .fournisseurs import (CLASSES_DECOUPABLES, MOTIF_USER_AGENT_REFUSE, SPAN_LOGS_DEFAUT,
+from .fournisseurs import (CLASSES_DECOUPABLES, CLASSES_TRANSITOIRES, MOTIF_USER_AGENT_REFUSE, SPAN_LOGS_DEFAUT,
                            SPAN_LOGS_PLANCHER, USER_AGENT_DEFAUT, classer, explique)
 
 # Liste BLANCHE. Toute méthode absente est refusée côté client, avant le réseau.
@@ -125,6 +125,38 @@ def verifier_span(n):
     return n
 
 
+RELANCE_ESSAIS_MAX = 10          # au-delà, ce n'est plus une relance, c'est une attente déguisée
+RELANCE_ATTENTE_MAX_S = 120.0   # une attente unique plus longue masquerait une panne durable
+
+
+def _entier_strict(v, nom):
+    if isinstance(v, bool) or isinstance(v, float) or (isinstance(v, str) and not v.strip().isdigit()):
+        raise RpcRefused(f"ARRÊT : relance transitoire — `{nom}` doit être un ENTIER ({v!r}).")
+    return int(v)
+
+
+def verifier_relance(relance):
+    """`relance_transitoire` : None (aucune relance déclarée) ou les TROIS clés, dans leurs plafonds.
+
+    Rien d'implicite (KE#105), et rien de démesuré : au plus RELANCE_ESSAIS_MAX relances, au plus
+    RELANCE_ATTENTE_MAX_S par attente. Une déclaration hors plafond est refusée, pas tronquée."""
+    if relance is None:
+        return None
+    try:
+        r = {"essais": _entier_strict(relance["essais"], "essais"),
+             "attente_initiale_s": float(relance["attente_initiale_s"]),
+             "attente_max_s": float(relance["attente_max_s"])}
+    except (KeyError, TypeError, ValueError) as e:
+        raise RpcRefused(f"ARRÊT : relance transitoire incomplète ou illisible ({e!r}) : il faut `essais`, "
+                         f"`attente_initiale_s` et `attente_max_s`, toutes les trois.") from e
+    if r["essais"] < 1 or r["attente_initiale_s"] <= 0 or r["attente_max_s"] < r["attente_initiale_s"]:
+        raise RpcRefused(f"ARRÊT : relance transitoire incohérente {r} (essais ≥ 1, 0 < initiale ≤ max).")
+    if r["essais"] > RELANCE_ESSAIS_MAX or r["attente_max_s"] > RELANCE_ATTENTE_MAX_S:
+        raise RpcRefused(f"ARRÊT : relance transitoire hors plafond {r} (essais ≤ {RELANCE_ESSAIS_MAX}, "
+                         f"attente_max_s ≤ {RELANCE_ATTENTE_MAX_S:g}).")
+    return r
+
+
 def client_depuis(settings):
     """Construit le client AVEC les réglages du fournisseur configuré. Point unique : un appelant qui
     ferait `RpcClient(s.rpc_url)` tout seul retomberait sur les défauts du paquet, c'est-à-dire sur
@@ -132,7 +164,8 @@ def client_depuis(settings):
     return RpcClient(
         settings.rpc_url,
         user_agent=getattr(settings, "rpc_user_agent", USER_AGENT_DEFAUT),
-        max_log_span=getattr(settings, "rpc_max_log_span", SPAN_LOGS_DEFAUT))
+        max_log_span=getattr(settings, "rpc_max_log_span", SPAN_LOGS_DEFAUT),
+        relance_transitoire=getattr(settings, "rpc_relance_transitoire", None))
 
 
 class RpcClient:
@@ -149,15 +182,18 @@ class RpcClient:
     DECOUPAGES_MAX = 6
 
     def __init__(self, url, timeout=120, max_retries=4, user_agent=USER_AGENT_DEFAUT,
-                 max_log_span=SPAN_LOGS_DEFAUT):
+                 max_log_span=SPAN_LOGS_DEFAUT, relance_transitoire=None):
         self.url = url
         self.timeout = timeout
         self.max_retries = max_retries
         self.ua = verifier_user_agent(user_agent)
         self.max_log_span = verifier_span(max_log_span)
+        # Relance des refus TRANSITOIRES (`CLASSES_TRANSITOIRES`) : déclarée par le profil, sans défaut.
+        self.relance_transitoire = verifier_relance(relance_transitoire)
         self._sleep = time.sleep
         self.stats = {"calls": 0, "http": {}, "transport": 0, "rpc_error": 0, "http_429": 0, "retries": 0,
                       "attente_429_s": 0.0, "plages_découpées": 0,
+                      "relances_transitoires": 0, "attente_transitoire_s": 0.0,
                       # Dernière taille de tranche réellement utilisée : c'est elle qui dit à
                       # l'exploitant quoi poser dans SPINDEX_RPC_MAX_LOG_SPAN pour cesser de payer
                       # trois appels de découverte à chaque passe.
@@ -226,6 +262,8 @@ class RpcClient:
         n_429 = 0
         attendu_429 = 0.0
         essais = 0
+        essais_t = 0          # relances de refus TRANSITOIRES, bornées par le profil
+        attendu_t = 0.0
         while True:
             r = self._post(payload, timeout=timeout)
             if r["kind"] == "http" and r.get("status") == 429:
@@ -239,6 +277,24 @@ class RpcClient:
                 attendu_429 += w
                 self.stats["attente_429_s"] = round(self.stats["attente_429_s"] + w, 3)
                 self.stats["retries"] += 1
+                self._sleep(w)
+                continue
+            # Refus TRANSITOIRE du fournisseur (ex. dRPC 408 « Request timeout ») : relance BORNÉE à attente
+            # croissante, paramétrée par le profil. Sans paramètres déclarés : on ne relance PAS, on rend
+            # le refus annoté — l'appelant l'arrête en nommant la clé à déclarer (KE#105). Au-delà des
+            # essais : rendu annoté aussi, jamais avalé (KE#131 : borne, puis échec bruyant).
+            if r["kind"] == "rpc_error" and classer(r)[0] in CLASSES_TRANSITOIRES:
+                rel = self.relance_transitoire
+                if rel is None:
+                    return dict(r, transitoire={"relances": 0, "non_déclarée": True})
+                if essais_t >= rel["essais"]:
+                    return dict(r, transitoire={"relances": essais_t, "épuisée": True,
+                                                "attente_s": round(attendu_t, 3)})
+                w = min(rel["attente_initiale_s"] * (2 ** essais_t), rel["attente_max_s"])
+                essais_t += 1
+                attendu_t += w
+                self.stats["relances_transitoires"] += 1
+                self.stats["attente_transitoire_s"] = round(self.stats["attente_transitoire_s"] + w, 3)
                 self._sleep(w)
                 continue
             retryable = (r["kind"] == "transport") or (r["kind"] == "http" and r.get("status") in (502, 503, 504))
@@ -373,6 +429,16 @@ class RpcClient:
                     pourquoi = ("limitation de débit persistante — on ne découpe JAMAIS sur un 429 : "
                                 "cela multiplierait les appels au moment précis où le nœud en demande "
                                 "moins")
+                elif r.get("transitoire", {}).get("non_déclarée"):
+                    pourquoi = ("refus TRANSITOIRE du fournisseur (classe delai_fournisseur) et AUCUNE relance "
+                                "déclarée pour ce profil : déclarer `relance_transitoire` dans "
+                                "veilleur/fournisseurs.py:PROFILS, ou poser SPINDEX_RPC_RELANCE_ESSAIS, "
+                                "SPINDEX_RPC_RELANCE_ATTENTE_INITIALE_S et SPINDEX_RPC_RELANCE_ATTENTE_MAX_S")
+                elif r.get("transitoire", {}).get("épuisée"):
+                    t = r["transitoire"]
+                    pourquoi = (f"délai du fournisseur PERSISTANT : {t['relances']} relances ({t['relances'] + 1} "
+                                f"appels), {t['attente_s']} s d'attente, aucune réponse — refus transitoire devenu "
+                                f"durable ; on ne découpe pas (la plage n'est pas en cause)")
                 else:
                     pourquoi = explique(r)
                 raise RpcUnavailable(

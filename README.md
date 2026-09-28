@@ -49,14 +49,13 @@ qu'un témoin absent.
 
 `veilleur/` est une copie du paquet scellé `backend/veilleur`.
 
-> **État au 2026-09-28, après redéploiement.** La copie est la release EN SERVICE de `a`
-> (`5c670aa9…`, construite le 2026-09-28T17:22:15Z) sur le scellé de la famille du 2026-09-28T14:39:34Z
-> (`FIGE.json` `7ee8fc0c…`), qui porte la séparation de domaine C-4 et la signature anvil de
-> `bloc_inconnu`. `resynchroniser.sh` rend **ACCORD** : `a` et `b` publient la même empreinte
-> `54606ab6…`. `config/chaine-46630.json` vise le `SpindexRewards` post-C-4 `0x34ebcae3…` (bloc
-> 125 796 406), écrit par `outils/maj_chaine.py` depuis `deploiement-46630-20260928T165955Z.json`,
-> preuves sur la chaîne comprises. Au premier job, l'état restauré de l'ancien contrat est archivé
-> et `b` ré-amorce.
+> **État au 2026-09-28, soir.** La copie est prise sur le **scellé** de la famille qui déclare le 408 de
+> dRPC comme refus TRANSITOIRE (`FIGE.json` `19345435…`, empreinte `f02dcd48…`) — le premier job de `b`
+> (run 36469251579) avait été arrêté par ce 408 au milieu du ré-amorçage. **Ce scellé n'est pas encore
+> livré** : `a` tourne sur la release `5c670aa9…` (empreinte `54606ab6…`), donc `resynchroniser.sh`
+> affiche **DÉSACCORD** jusqu'à la livraison de `a` sur ce scellé, puis se relance sans argument (source =
+> release en service). `config/chaine-46630.json` vise le `SpindexRewards` post-C-4 `0x34ebcae3…`
+> (bloc 125 796 406), écrit par `outils/maj_chaine.py`, preuves sur la chaîne comprises.
 
 La règle d'exploitation reste : `b` doit exécuter le code que `a` exécute, pris dans une copie scellée,
 sinon une divergence entre les deux se lirait comme un désaccord sur la chaîne alors que ce serait un
@@ -80,10 +79,10 @@ de chaque job**, avant toute lecture de la chaîne) :
 
 L'ancrage 3 est le seul vérifiable de l'extérieur : l'instance `a` écrit la **même** valeur dans son
 `health.json` et dans chacun de ses battements, à chaque passe. Valeur de la copie (scellé du
-2026-09-28 ; `a` publie la même, release `5c670aa9…`) :
+2026-09-28, soir ; `a` publiera la même une fois livrée sur ce scellé) :
 
 ```
-54606ab6fbd2b9f395366d4f7b09c2ab16aaaec7ccb0136cf333151644b393e0
+f02dcd480e9dde32488c5dc9ad22cd40d9705687ce9becb5e9f6ddfaf05c5e68
 ```
 
 Deux instances qui ne portent pas cette même empreinte n'exécutent pas le même code, et leur accord
@@ -124,6 +123,28 @@ l'écrit en `SPINDEX_RPC_PROFIL` dans le `.env`. Le domaine de l'URL secrète es
 **mesurés** du paquet scellé : URL dRPC sans ce profil, ou profil que l'URL contredit, c'est un ARRÊT avant
 toute lecture (l'URL n'est jamais imprimée). Le banc (jambe H) le prouve par comportement, contre un faux
 dRPC local (ports 18570-18579) : avec le profil, 1 000 blocs lus sans un refus ; sans lui, refus.
+
+dRPC (plan gratuit) rend aussi, par moments, un **HTTP 408 « Request timeout »** sur une plage pourtant
+valide (run 36469251579). Le paquet le classe `delai_fournisseur` : **relance bornée** à attente
+croissante (5 essais, 2 → 30 s, déclarés dans le profil `drpc`, sans défaut), jamais de redécoupage,
+puis échec nommé. Et si l'amorçage échoue quand même, l'étape « Publier » sauve l'**état partiel**
+(`outils/etat_partiel.sh`, commit non signé qui le dit) : le job suivant reprend au dernier segment figé
+(un segment tous les ~200 appels) au lieu de repartir du bloc de déploiement.
+
+**Ce que la reprise n'économise PAS.** Elle ne sauve que la jambe C de l'amorçage (la relecture vers le
+cache). La jambe D — le différentiel complet, qui relit TOUT depuis le bloc de déploiement sans cache, et
+qui est ce qui interdit d'attester sur un cache faux — n'a pas de reprise et grandit avec l'âge du
+contrat. Mesuré le 2026-09-28 (cadence 0,156 s/bloc, 101 blocs par appel, dRPC entre 0,195 et 0,30 s par
+appel) : **D coûte 5 488 appels, soit 18 à 27 min, par jour de chaîne depuis le déploiement**
+(2026-09-28T16:59Z). Il dépasse les 36 min de l'étape « Veiller » à un âge de 1,3 à 2 jours, soit
+**entre le 2026-09-30 vers 00:30Z et 17:20Z** selon la latence. L'amorçage de `b` doit donc aboutir
+avant ; au-delà, il faut un D lui-même repris par segments (famille `veilleur`), pas un délai plus long.
+
+**Propriété nouvelle, à garder en tête : tout ce qui est dans `etat/` survit à un échec.** C'est voulu pour
+le cache, et c'est pourquoi deux gardes l'accompagnent : un cache que D a CONTREDIT est écarté hors de
+`etat/` par `executer.sh` avant toute publication (sinon chaque job le reprendrait et refuserait pour
+toujours), et `outils/etat_sain.sh` refuse de publier un `etat/` qui contient un fichier de type secret
+(`*.hex`, `*.env`, `attest-*`, `*.pem`, `*.key`).
 
 ## Au redéploiement : UNE commande pour la configuration de chaîne
 
@@ -295,7 +316,7 @@ fournie : une signature vérifiée contre la clé que le document transporte n'a
 
 Trois choses à regarder dans la sortie :
 - `signé_par` — c'est bien votre clé, celle notée à l'étape 2 ;
-- `empreinte_sources` — c'est bien `54606ab6fbd2b9f3…` (valeur de `SCEAU.json`), la même que celle publiée par `a` ;
+- `empreinte_sources` — c'est bien `f02dcd480e9dde32…` (valeur de `SCEAU.json`), la même que celle publiée par `a` ;
 - `jugement` — `VERT`, ou `ROUGE` avec ses motifs nommés.
 
 Et si vous changez un octet de `courant/health.json`, la commande doit **refuser**. Faites-le une
@@ -341,8 +362,8 @@ print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryp
 " > /tmp/cle-banc.hex
 
 # BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 9 situations, 27 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 23 cassures : chaque garde est-elle portante ?
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 10 situations, 42 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 29 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin
