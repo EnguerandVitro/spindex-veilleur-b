@@ -1,39 +1,38 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 125860718,
-  "code": "section_en_echec:burn",
-  "detail": "sections en échec : burn",
-  "empreinte": "6993f76806d3628257afe933ace1ef6c84fbb375e521fe9a7af5e5053236035a",
+  "bloc": 125899722,
+  "code": null,
+  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.21 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "empreinte": "76e0dcf70d7bc4ebb3e2e664bdb9b040cee8ba5a1d0c47a93ab0dc8befc1c56c",
   "format": 1,
+  "fournisseurs": {
+   "etat": "rpc.testnet.chain.robinhood.com",
+   "journaux": "robinhood-testnet.drpc.org"
+  },
   "instance": "b",
-  "passe": 1,
-  "resultat": "erreur",
+  "passe": 2,
+  "resultat": "ok",
   "rpc": {
-   "appels": 168,
+   "appels": 610,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790625193
+  "ts": 1790634237
  },
- "code_sortie_paquet": 20,
- "compteur_precedent": null,
+ "code_sortie_paquet": 0,
+ "compteur_precedent": 1,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-28T19:53:13Z",
- "juge_le_ts": 1790625193,
- "motifs": [
-  {
-   "cle": "tache_en_erreur",
-   "texte": "la tâche a échoué (code « section_en_echec:burn ») : elle n'a pas fait son travail. sections en échec : burn"
-  }
- ],
+ "juge_le": "2026-09-28T22:23:57Z",
+ "juge_le_ts": 1790634237,
+ "motifs": [],
  "remarques": [
-  "code de sortie du paquet scellé : 20"
+  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.21 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
  "tache": "passe",
- "verdict": "ROUGE"
+ "verdict": "VERT"
 }

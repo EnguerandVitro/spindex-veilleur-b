@@ -1,0 +1,19 @@
+{
+ "mesures": [
+  {
+   "ts": 1790634237,
+   "tête": 125900054,
+   "blocs": 6204,
+   "fenêtre_s": 1456.7,
+   "borne": "exacte",
+   "sonde": "sujet : SpindexRewards.totalStaked() sur 0x34ebcae3a620e50eef215ee2d526c0afa263f8b3",
+   "agrégat": "minimum",
+   "n_sondes": 3,
+   "sondes_s": [
+    1726.4,
+    1456.7,
+    1493.7
+   ]
+  }
+ ]
+}
