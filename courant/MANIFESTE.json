@@ -11,18 +11,18 @@
   "declencheur": "workflow_dispatch",
   "depot": "EnguerandVitro/spindex-veilleur-b",
   "fournisseur": "github-actions",
-  "run_id": "36497664040",
-  "run_number": "39",
+  "run_id": "36498508618",
+  "run_number": "40",
   "tentative": "1",
-  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/36497664040"
+  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/36498508618"
  },
  "fichiers": {
-  "JUGEMENT.json": "d0237aed45aa6850131a1f0901521f11df63acbf8685c2a244bc7c4314ba12e8",
+  "JUGEMENT.json": "57d599f1b0d78f8130abe7025c4a5f39b93ccdbac65ce44118376a50ef8ec65e",
   "amorcage.json": "36d6d6b8ed363a0bf2892755c46f3abc3f4564552306c0d64e126e5445701773",
-  "battement-passe.json": "a37225bb0d1bfbb89b2d7938639fca38828a4063e9fde35c3fd3da8a7b8aa395",
-  "derniere-passe.json": "32eb0a9ded0164468919e3617c2006a4eaa33dcee94dcaa30f8ecf8bdbbf5681",
-  "durees.json": "23e458887538a9a97a7a763529d483ed22e781557877e1c64f150bef5a2b6b78",
-  "health.json": "00514a0fb9288aecf10fb74c23ad4b749a5361f0453fa65699b64aa3572b8b2d"
+  "battement-passe.json": "48ebef6cfe25a0a7d9fc552911ab3d8219856a9b479679340a0f550e9310c179",
+  "derniere-passe.json": "9c55aa2262d0ede2e75218ecb830df0850623598a95dcb345523db11abc90f46",
+  "durees.json": "825b3c6c7164935de13a4bec7b0586cd328f2c23a5eb98a7e3efb1089ec9e21c",
+  "health.json": "e2a8abfad440ba34a3c6e70398978b90b30c69c60551b78fd3f2680100e74eff"
  },
  "instance": "b",
  "jugement": {
@@ -31,8 +31,8 @@
   "verdict": "VERT"
  },
  "portée": "Ce lot est l'état publié de l'instance b du veilleur. La signature prouve qu'il vient du détenteur de la clé d'attestation de b, et que ces octets-là n'ont pas bougé. Elle ne prouve ni l'heure, ni qu'aucun lot ne manque, ni que la clé n'a servi qu'ici : GitHub voit le secret, et le propriétaire du compte peut supprimer un job. Le silence de b se juge par la surveillance, pas par ce document.",
- "produit_le": "2026-09-28T23:23:10Z",
- "produit_le_ts": 1790637790,
+ "produit_le": "2026-09-28T23:32:41Z",
+ "produit_le_ts": 1790638361,
  "release_du_paquet_scelle": "d9fb94805dfd3200271a5ad913668cccd69233e36f5c72eb7495c5c2abec9f21",
  "schéma": "spindex-veilleur-b-lot/1",
  "service": "veilleur"
