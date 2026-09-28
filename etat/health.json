@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1790638361,
+ "ts": 1790639257,
  "empreinte": "76e0dcf70d7bc4ebb3e2e664bdb9b040cee8ba5a1d0c47a93ab0dc8befc1c56c",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -24,7 +24,7 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_PASSE_S / SPINDEX_VEILLEUR_PRECISION_PASSE_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_PASSE_S dans le .env de l'instance",
    "pire_exécution_s": 121.0,
-   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 101.29 s sur 7 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 101.29 s sur 8 exécution(s))",
    "silence_max_s": 1081,
    "retard_bloc_max": 11996,
    "formules": {
@@ -59,8 +59,8 @@
    "précision_s": null,
    "délai_aléatoire_s": null,
    "période_provenance": "DÉCLARÉE par l'instance — SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S=non-planifiée (déclarée non planifiée sur cette instance)",
-   "pire_exécution_s": 347.3,
-   "pire_exécution_source": "borne théorique (théorique 347.3 s = 184 appels × 1.89 s ; observé max None s sur 0 exécution(s))",
+   "pire_exécution_s": 353.3,
+   "pire_exécution_source": "borne théorique (théorique 353.3 s = 187 appels × 1.89 s ; observé max None s sur 0 exécution(s))",
    "silence_max_s": null,
    "retard_bloc_max": null,
    "formules": {

@@ -1,9 +1,9 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 125916178,
+  "bloc": 125919318,
   "code": null,
-  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.26 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.27 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "76e0dcf70d7bc4ebb3e2e664bdb9b040cee8ba5a1d0c47a93ab0dc8befc1c56c",
   "format": 1,
   "fournisseurs": {
@@ -11,27 +11,27 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 7,
+  "passe": 8,
   "resultat": "ok",
   "rpc": {
-   "appels": 226,
+   "appels": 238,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790638361
+  "ts": 1790639257
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 6,
+ "compteur_precedent": 7,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-28T23:32:41Z",
- "juge_le_ts": 1790638361,
+ "juge_le": "2026-09-28T23:47:37Z",
+ "juge_le_ts": 1790639257,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.26 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.27 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
  "tache": "passe",
  "verdict": "VERT"
