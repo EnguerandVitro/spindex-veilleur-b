@@ -1,0 +1,111 @@
+{
+ "ancres_publiees": {
+  "claim[0]": {
+   "avec_etiquette_prefixe": "0xfba68a85",
+   "sans_etiquette_prefixe": "0x2d935f84",
+   "source": "LOT_SECURITE_2026-09 §C-4 / backend/rapports/veilleur.md §12.4"
+  }
+ },
+ "calcule_par": "cast (Foundry) : keccak et abi-encode, implémentation indépendante du veilleur",
+ "convention_sha256": "3b05fbc32ac75cd8757861204ebba841982d7a0b3847832faffd155685c65927",
+ "etiquettes_preimages_du_contrat": {
+  "claim": "SPINDEX/rewards/claim/v1",
+  "draw": "SPINDEX/rewards/draw/v1"
+ },
+ "format": 1,
+ "genere_par": "outils/conformite.py générer — NE PAS ÉDITER : se vérifie contre son générateur (`contrôler-générateur`, KE#148)",
+ "sources": {
+  "contracts/rewards/rewards_constants.json": "33435f434151bf63c63befcae13f5536c72e93c32ead9e0913a79fd27dd2f85c",
+  "contracts/src/SpindexRewards.sol": "c806079ced3382f0f4d33af6536ca3fc2719181b9c94f3724d56804461ea1090"
+ },
+ "vecteurs": {
+  "claim": [
+   {
+    "entree": [
+     "0x00000000000000000000000000000000000000a1",
+     "7",
+     "12000000",
+     "3000000"
+    ],
+    "feuille": "0xfba68a857f5432359e1c6e923756a3af057ff05985b8d47a632df285f5697eaf",
+    "feuille_sans_etiquette": "0x2d935f84db78adaa75dba31e8ee15975d8d614f59e32d1a49df3a66a27e94f3b"
+   },
+   {
+    "entree": [
+     "0x0000000000000000000000000000000000000000",
+     "0",
+     "0",
+     "0"
+    ],
+    "feuille": "0x0b083f34502f39d30c8dc5239c69fd44cda19ffa2ed3e9f024351b22e0da473c",
+    "feuille_sans_etiquette": "0x1b87a1ba3a3694400088077b434346c972a09d894c48df6ec28dabddad2007a1"
+   },
+   {
+    "entree": [
+     "0xffffffffffffffffffffffffffffffffffffffff",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    ],
+    "feuille": "0xabb4b71045e2807ca8f072de93f606d1f0920de3cd9b8e1e9157485207344f61",
+    "feuille_sans_etiquette": "0xd28ce07f9ecc9c0bdd117f685a5c6e84ff5b9c659a6360be076783d9633f7338"
+   },
+   {
+    "entree": [
+     "0x8ba1f109551bd432803012645ac136ddd64dba72",
+     "1",
+     "1",
+     "0"
+    ],
+    "feuille": "0xb9a1084d07094e47a5efc62ef2105bebccc48ff2508b58720e8458dbcd02b212",
+    "feuille_sans_etiquette": "0xbd3d1c9b3e614f1d6dc9e231f3ac4d954962f7254df3e0101d85f5e21bfefce1"
+   }
+  ],
+  "draw": [
+   {
+    "entree": [
+     "0x00000000000000000000000000000000000000a1",
+     "7",
+     "0",
+     "0",
+     "12000000"
+    ],
+    "feuille": "0xab23ee17a856c27763fee54b31e5446f28b316d1d2bcb3cd84efb2802cb5d087",
+    "feuille_sans_etiquette": "0x4b46c5e2ada34d7b07ea948beec7106ed0ebf0e2809288d15212d3cbf99e8ac7"
+   },
+   {
+    "entree": [
+     "0x0000000000000000000000000000000000000000",
+     "0",
+     "0",
+     "0",
+     "0"
+    ],
+    "feuille": "0xb06126d6ce9541e898a527cf4cca05ea6a9eb840196564990dcbdb7d74312c54",
+    "feuille_sans_etiquette": "0x70ee521331224ec4b86e61943848c5853b84b378fa8a4cf1965aab44b31f71f2"
+   },
+   {
+    "entree": [
+     "0xffffffffffffffffffffffffffffffffffffffff",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639934",
+     "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    ],
+    "feuille": "0xb1c8aa04e17a213f323316f6d7a48cabe3fa41104fd32175ab628e18cf93bb6b",
+    "feuille_sans_etiquette": "0x9b30ce871739e8f5269166d13a9d71d70e5ca2ad18df229843c6b679f147b26e"
+   },
+   {
+    "entree": [
+     "0x8ba1f109551bd432803012645ac136ddd64dba72",
+     "3",
+     "41",
+     "1000",
+     "2500"
+    ],
+    "feuille": "0x07f1ae589a8e3d8cfa998c36c4051ac0f61b7606d46e8cebcdcf52c8b8553ddc",
+    "feuille_sans_etiquette": "0x20b8a77bd6977cb1ea06dd4ab077d34c057454fb6b975caf1d74c469c55f5f3a"
+   }
+  ]
+ }
+}

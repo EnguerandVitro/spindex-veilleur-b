@@ -3,9 +3,9 @@
  "format": 1,
  "reseau": "Robinhood Chain testnet",
  "chain_id": 46630,
- "rewards": "0xb1545499edc98c1621d09f3e586db7c6e5e7b70d",
- "deploy_block": 122618784,
- "tx_deploiement": "0xf6464f1c17aed88bcb73c1385150fcae9ed0308d3ac7a0bcec872263e100e625",
+ "rewards": "0x34ebcae3a620e50eef215ee2d526c0afa263f8b3",
+ "deploy_block": 125796406,
+ "tx_deploiement": "0xe36a081f1f21e2dfe2a917cd3deba8c2f04c9e5db45e820d3615c26df021ec4a",
  "multicall3": "0xca11bde05977b3631167028862be2a173976ca11",
  "tables_base_url": "https://spindex.family/tables",
  "publish_deadline_s": 300,
@@ -15,8 +15,10 @@
  "week_unposted_alert_days": 7,
  "draw_unsettled_alert_days": 3,
  "_provenance": {
-  "rewards / deploy_block / tx_deploiement": "registre d'amorçage de l'instance a (~/.local/state/spindex-testnet/veilleur-a/amorcage.json), lui-même écrit après les quatre preuves de veilleur/amorcage.py",
+  "rewards / deploy_block / tx_deploiement": "manifeste de déploiement contracts/deploy/manifestes/deploiement-46630-20260928T165955Z.json (sha256 7264376b81d43c7ca0e84bf1b0b020fb8fc96cf840a2716afd68cb71db657e21), écrit par outils/maj_chaine.py après preuve sur la chaîne : chainId 46630 ; reçu de création : adresse, bloc, statut ; empreinte du code en place ; TAG_CLAIM / TAG_DRAW = étiquettes des vecteurs dorés (C-4)",
   "seuils de temps": "identiques à ceux de l'instance a (~/.config/spindex/testnet/veilleur-a.env) ; window_need_s absent de ce .env, donc le défaut 480 s du paquet s'y applique et il est écrit ici en clair",
-  "tables_base_url": "l'instance a vise un dossier LOCAL de la machine keeper, ce que b ne peut évidemment pas lire. b vise l'emplacement PUBLIÉ. C'est une différence VOULUE : elle rend b capable de constater qu'une table n'est pas publiée là où le public la cherche, ce que a ne peut pas voir."
- }
+  "tables_base_url": "l'instance a vise un dossier LOCAL de la machine keeper, ce que b ne peut évidemment pas lire. b vise l'emplacement PUBLIÉ. C'est une différence VOULUE : elle rend b capable de constater qu'une table n'est pas publiée là où le public la cherche, ce que a ne peut pas voir.",
+  "rpc_profil": "le secret SPINDEX_B_RPC_URL est chez dRPC (arbitrage coordinateur 2026-09-28 ; rapport veilleur §13 : 101 blocs par plage, refus en HTTP 400). outils/preparer.py REFUSE de démarrer si le domaine de l'URL secrète contredit ce profil, dans les deux sens."
+ },
+ "rpc_profil": "drpc"
 }

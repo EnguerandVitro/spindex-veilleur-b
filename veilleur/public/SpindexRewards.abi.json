@@ -302,6 +302,32 @@
  },
  {
   "type": "function",
+  "name": "TAG_CLAIM",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "TAG_DRAW",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "VERIFY_GAS",
   "inputs": [],
   "outputs": [
@@ -527,6 +553,19 @@
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "domainTags",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32[2]",
+    "internalType": "bytes32[2]"
+   }
+  ],
+  "stateMutability": "pure"
  },
  {
   "type": "function",

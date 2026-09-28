@@ -22,9 +22,17 @@ interface IERC20Min {
 ///         lecture de prix $SPDX (les seuils de rang sont en TOKENS, figés au déploiement — décision 2026-09-20).
 ///
 ///         CONVENTION MERKLE (reconnaissance §5, identique pour les deux arbres) :
-///           feuille = keccak256(bytes.concat(keccak256(abi.encode(...))))   ← DOUBLE hachage, abi.encode
-///           nœud    = keccak256(min(a,b) ‖ max(a,b))                        ← paires triées
+///           feuille = keccak256(bytes.concat(keccak256(abi.encode(TAG, ...))))  ← DOUBLE hachage, abi.encode
+///           nœud    = keccak256(min(a,b) ‖ max(a,b))                            ← paires triées
 ///         Côté indexeur : pas de duplication du nœud impair, feuilles triées, `leafCount` publié avec la racine.
+///
+///         ÉTIQUETTE DE DOMAINE, PREMIER MOT DE CHAQUE PRÉIMAGE (§12.1, red team backend F03) : `TAG_CLAIM` pour
+///         l'arbre de paiement hebdomadaire, `TAG_DRAW` pour l'arbre de poids du tirage. Avant l'étiquette, la
+///         feuille de `claim` était `abi.encode(address, uint256, uint256, uint256)` — EXACTEMENT la forme de la
+///         feuille de saison de l'indexeur, au point que les deux hachages MESURÉS étaient identiques
+///         (`0x9207f661…`). Une racine de points passée par erreur à `postWeek` aurait payé les points en
+///         micro-USDG. Table canonique des étiquettes : `domainTags()` — c'est la SEULE source, aucun test ni
+///         aucun producteur hors chaîne ne recopie cette liste.
 ///
 ///         RISQUE PORTÉ, MESURÉ (reconnaissance §4) : `owner()` du token $SPDX est et restera l'EOA Virtuals
 ///         `0xe220329659d41b2a9f26e83816b424bdacf62567` (aucun code : une clé privée). Elle peut inscrire ce
@@ -92,6 +100,17 @@ contract SpindexRewards {
 
     /// @dev sélecteur de `burn(uint256)` du token d'agent Virtuals.
     bytes4 private constant SEL_BURN = bytes4(keccak256("burn(uint256)"));
+
+    // ---------------------------------------------------------------- §12.1 étiquettes de domaine merkle
+
+    /// @notice §12.1 : premier mot de la préimage de TOUTE feuille de l'arbre de PAIEMENT hebdomadaire (`claim`).
+    /// @dev    Invariant visé : *une feuille valide dans un arbre n'est valide dans AUCUN autre arbre du système
+    ///         entier.* Écarté : distinguer les domaines par le NOMBRE de champs (4 mots contre 5) — la protection
+    ///         tiendrait alors à une coïncidence de cardinalité qu'un ajout de champ futur brise en silence.
+    bytes32 public constant TAG_CLAIM = keccak256("SPINDEX/rewards/claim/v1");
+
+    /// @notice §12.1 : premier mot de la préimage de TOUTE feuille de l'arbre de POIDS du tirage (`claimPrize`).
+    bytes32 public constant TAG_DRAW = keccak256("SPINDEX/rewards/draw/v1");
 
     // ================================================================== types
 
@@ -169,6 +188,8 @@ contract SpindexRewards {
     address public keeper;
     /// @notice §7 : pause d'urgence. N'empêche JAMAIS `unstake`, ni `claim` d'une semaine déjà publiée, ni
     ///         `settleDraw` / `claimPrize` d'un tirage déjà ouvert (l'engagement est antérieur à la pause).
+    /// @dev    QUATRE jambes, donc quatre cassures — une par fonction : `A6` (unstake), `A7` (claim), `ROLE5`
+    ///         (settleDraw), `ROLE4` (claimPrize). Une cassure globale n'en prouverait qu'une (KE#76, per-leg).
     bool public paused;
 
     /// @notice $SPDX stakés par les joueurs (passif du contrat : jamais brûlables par le keeper).
@@ -327,7 +348,9 @@ contract SpindexRewards {
     /// @param verifier_  `DrandQuicknetVerifier` déployé (sans état, sans propriétaire)
     /// @param usdg_      USDG (6 déc.)
     /// @param owner_     Safe multisig
-    /// @param keeper_    keeper du burn et du tirage (0 possible : posé ensuite par `setKeeper`)
+    /// @param keeper_    keeper du burn hebdomadaire, et de RIEN d'autre (0 possible : posé ensuite par
+    ///                   `setKeeper`). §12.2 : « et du tirage » figurait ici, alors qu'`openDraw` est `onlyOwner`
+    ///                   depuis la v5 — même dérive que celle de `setKeeper`, au même endroit du raisonnement.
     /// @param delta      marge (s) avant le round drand lié à un tirage, ∈ [MIN_DELTA, MAX_DELTA]
     /// @param verifyGas  plafond de gaz de `verifyUncompressed`
     /// @param thresholds seuils de rang EN TOKENS $SPDX (Small, Mid, Large, Mega), strictement croissants, > 0
@@ -464,6 +487,9 @@ contract SpindexRewards {
     }
 
     /// @notice rebrûle les 10 % de sortie dont le `burn` avait échoué. Ouvert à tous (ne déplace rien vers personne).
+    /// @dev    « Ouvert à tous » est une affirmation de POUVOIR : elle est une dette de preuve (KE#126), payée par
+    ///         `test_C5_flushExitBurn_is_open_to_everyone` (un inconnu vide le reliquat) et par la cassure
+    ///         `ROLE3` du harnais, qui referme la fonction sur le Safe et DOIT faire rougir ce test.
     function flushExitBurn() external nonReentrant {
         uint256 amount = strandedBurn;
         if (amount == 0) revert NothingStranded();
@@ -497,6 +523,15 @@ contract SpindexRewards {
     }
 
     /// @notice le Safe publie l'empreinte de la semaine. UNE SEULE FOIS : personne ne peut réécrire une racine.
+    /// @dev    ⚠️ **Le pouvoir de racine arbitraire est ICI, et il appartient au SAFE — jamais au keeper** (§12.2,
+    ///         `onlyOwner` depuis la v1 ; `test_C5_keeper_powers_are_exactly_burn` exige `NotOwner` sur cet appel
+    ///         depuis le keeper). `root` n'est recoupée contre aucun état on-chain : une racine dont une feuille
+    ///         désigne le Safe le fait payer jusqu'à `funded(weekId)`. Le contrat ne vérifie qu'une appartenance
+    ///         et une borne d'enveloppe. La borne réelle est **hors chaîne** : la table des feuilles doit être
+    ///         publiée et recoupée avant chaque `postWeek` (§21/P1-2), et le contrôle de veille correspondant doit
+    ///         nommer le **Safe** comme sujet.
+    ///         Ce que le contrat garantit en revanche, depuis §12.1 : la racine posée ici ne peut PAS être une
+    ///         racine d'un autre arbre du système (saison, poids de tirage) — les feuilles portent `TAG_CLAIM`.
     /// @param  totalUsdg somme des feuilles annoncée par l'indexeur. EXIGENCE (§16) : `totalUsdg ≤ funded(weekId)`
     ///         au moment de la publication — on ne publie jamais une promesse que l'enveloppe ne couvre pas.
     ///         C'est une borne de PUBLICATION ; la borne des PAIEMENTS reste `funded` (contrôlée à chaque `claim`,
@@ -518,8 +553,10 @@ contract SpindexRewards {
 
     /// @notice le joueur réclame sa feuille. UNE SEULE FOIS par semaine, pour le montant EXACT de la feuille,
     ///         jamais au-delà de l'enveloppe versée. JAMAIS bloqué par la pause (invariant §8.2).
-    /// @dev    feuille = keccak256(bytes.concat(keccak256(abi.encode(address player, uint256 weekId,
-    ///         uint256 rakebackUsdg, uint256 revshareUsdg)))) — convention de reconnaissance §5.
+    /// @dev    feuille = keccak256(bytes.concat(keccak256(abi.encode(TAG_CLAIM, address player, uint256 weekId,
+    ///         uint256 rakebackUsdg, uint256 revshareUsdg)))) — convention de reconnaissance §5 + étiquette de
+    ///         domaine §12.1. `TAG_CLAIM` est le PREMIER mot : sans lui, la préimage est
+    ///         `(address, uint256, uint256, uint256)`, la forme exacte de la feuille de saison de l'indexeur.
     ///         La RÉCOLTE DU RAKEBACK divise le MULTIPLICATEUR de boost par deux, jamais sous ×1 (§15 : ×3 → ×1,5) ;
     ///         le rev-share, lui, ne touche pas au boost (§3).
     function claim(uint256 weekId, uint256 rakebackUsdg, uint256 revshareUsdg, bytes32[] calldata proof)
@@ -535,8 +572,9 @@ contract SpindexRewards {
         uint256 amount = rakebackUsdg + revshareUsdg;
         if (amount == 0) revert BadAmount();
 
-        bytes32 leaf =
-            keccak256(bytes.concat(keccak256(abi.encode(msg.sender, weekId, rakebackUsdg, revshareUsdg))));
+        bytes32 leaf = keccak256(
+            bytes.concat(keccak256(abi.encode(TAG_CLAIM, msg.sender, weekId, rakebackUsdg, revshareUsdg)))
+        );
         if (!_verify(proof, root, leaf)) revert BadProof();
 
         uint256 claimed_ = uint256(w.claimed) + amount;
@@ -639,6 +677,8 @@ contract SpindexRewards {
 
     /// @notice prouve qu'un round drand EXISTE, en vérifiant sa signature. **Ouverte à tous**, idempotente, ne
     ///         déplace rien : c'est une horloge, pas un pouvoir. Fait monter `maxPublishedRound` (monotone).
+    /// @dev    Dette de preuve (KE#126) payée par `test_C5_publishRound_is_open_to_everyone` et par la cassure
+    ///         `V5g`, qui la referme sur le Safe.
     function publishRound(uint64 round, bytes calldata sig96) external nonReentrant returns (bytes32) {
         return _publishRound(round, sig96);
     }
@@ -647,11 +687,16 @@ contract SpindexRewards {
     ///         **Réservée au Safe** (`onlyOwner`) depuis la v5 : voir §23/P0-1 (a) — `weightsRoot` est arbitraire,
     ///         donc ouvrir un tirage EST un pouvoir de sortie de fonds, qui n'a rien à faire sur une clé chaude.
     ///         La dotation doit DÉJÀ être détenue par le contrat (pas de tirage sans dotation).
-    /// @dev    `weightsRoot` : feuilles keccak256(bytes.concat(keccak256(abi.encode(address player, uint256 weekId,
-    ///         uint256 index, uint256 cumulativeFrom, uint256 cumulativeTo)))). Le PAVAGE EXACT de
+    /// @dev    `weightsRoot` : feuilles keccak256(bytes.concat(keccak256(abi.encode(TAG_DRAW, address player,
+    ///         uint256 weekId, uint256 index, uint256 cumulativeFrom, uint256 cumulativeTo)))). Le PAVAGE EXACT de
     ///         [0, totalWeight) est garanti par construction côté indexeur (invariant §10.8) : une preuve
     ///         d'inclusion seule ne peut pas le vérifier. **Et le contrat ne vérifie PAS que les poids décrivent
-    ///         les stakes réels** : voir la réserve portée par `setKeeper`.
+    ///         les stakes réels.** `weightsRoot` est ARBITRAIRE : une racine dont l'unique feuille désigne le Safe
+    ///         lui-même emporte toute la dotation, racine concordante et pavage exact compris. Le sujet de cette
+    ///         réserve est donc **le Safe**, seul appelant possible — §12.2 l'attribuait au keeper, qui ne peut
+    ///         pas appeler cette fonction. La borne est **hors chaîne** : la table des poids doit être publiée et
+    ///         recoupée avant chaque ouverture (§21/P1-2). Tant que ce veilleur n'existe pas, elle n'est tenue
+    ///         par personne.
     /// @param  proofRound / proofSig96 : un round drand RÉCENT et sa signature, exigés pour que le plancher
     ///         `maxPublishedRound + 2` ne soit pas inerte. Sans cette preuve, `maxPublishedRound` serait vieux
     ///         d'environ 201 600 rounds entre deux tirages hebdomadaires, et le plancher ne bornerait rien.
@@ -703,6 +748,10 @@ contract SpindexRewards {
 
     /// @notice règle le tirage avec la signature drand du round figé à l'ouverture. OUVERT À TOUS (personne ne peut
     ///         bloquer un règlement), pas bloqué par la pause : l'engagement est antérieur.
+    /// @dev    Deux affirmations de pouvoir, deux dettes de preuve (KE#126), payées séparément :
+    ///         `test_C5_settleDraw_is_open_to_everyone` + cassure `ROLE2` (fonction refermée sur le keeper), et
+    ///         `test_C5_pause_blocks_neither_settleDraw_nor_claimPrize` + cassures `ROLE4` / `ROLE5`, une par
+    ///         fonction — une seule cassure pour les deux laisserait l'autre jambe non portée.
     /// @dev    Appel au vérificateur en `staticcall` PLAFONNÉ : une signature invalide fait brûler au précompilé
     ///         BLS tout le gaz transmis.
     function settleDraw(uint256 weekId, bytes calldata sig96) external nonReentrant {
@@ -764,7 +813,7 @@ contract SpindexRewards {
         if (x < cumulativeFrom || x >= cumulativeTo) revert NotTheWinner(x);
 
         bytes32 leaf = keccak256(
-            bytes.concat(keccak256(abi.encode(player, weekId, index, cumulativeFrom, cumulativeTo)))
+            bytes.concat(keccak256(abi.encode(TAG_DRAW, player, weekId, index, cumulativeFrom, cumulativeTo)))
         );
         if (!_verify(proof, d.weightsRoot, leaf)) revert BadProof();
 
@@ -817,21 +866,25 @@ contract SpindexRewards {
         emit PauseSet(p);
     }
 
-    /// @notice keeper révocable (0 = personne). Depuis la v5, ses seuls pouvoirs sont `burn` (détruire des $SPDX
-    ///         du solde LIBRE, dans la limite de l'enveloppe déclarée) et `postWeek`. `openDraw` lui a été
-    ///         RETIRÉE (§23/P0-1).
-    /// @dev    ⚠️ **Ce que le contrat garantit, et ce qu'il ne garantit pas.** Garanti : le keeper ne peut pas
-    ///         transférer de jetons vers une adresse de son choix, ni toucher aux stakes, ni aux enveloppes
-    ///         versées (`_free` les exclut), ni sortir un dollar du contrat.
-    ///         **NON garanti : que les racines qu'il publie décrivent la réalité.** `postWeek` prend une
-    ///         `merkleRoot` ARBITRAIRE : une racine dont une feuille le désigne lui-même le fait payer jusqu'à
-    ///         `funded(weekId)` de la semaine. Le contrat ne vérifie aucune feuille contre un état on-chain — il
-    ///         vérifie seulement une appartenance à une racine qu'on lui donne, et une borne d'enveloppe.
-    ///         C'est un pouvoir de détournement borné par l'enveloppe, pas l'absence de pouvoir.
-    ///         La borne réelle est **hors chaîne** : la table des feuilles doit être publiée et recoupée avant
-    ///         chaque `postWeek` (§21/P1-2 corrigé). Tant que ce veilleur n'existe pas, cette garantie n'est
-    ///         tenue par personne — et l'argument « pas de préavis de 48 h sur le keeper parce qu'il n'a aucun
-    ///         pouvoir de sortie de fonds » est FAUX. Il a été retiré de la source et des rapports (§23/P0-1 b).
+    /// @notice keeper révocable (0 = personne). Depuis la v5, **son seul pouvoir est `burn`** : détruire des
+    ///         $SPDX du solde LIBRE, dans la limite de l'enveloppe déclarée par le Safe. `openDraw` lui a été
+    ///         RETIRÉE (§23/P0-1) ; `postWeek` ne lui a JAMAIS appartenu (elle est `onlyOwner` depuis la v1).
+    /// @dev    ⚠️ **C-5 / §12.2 — correction d'une DÉRIVE DE DOCUMENTATION.** Ce bloc affirmait jusqu'ici que les
+    ///         pouvoirs du keeper étaient « `burn` et `postWeek` », puis bâtissait sur `postWeek` toute une
+    ///         exigence de veilleur **attachée au keeper**. `postWeek` est `external onlyOwner` : le keeper ne
+    ///         peut pas l'appeler (`NotOwner`). L'écart allait dans le sens sûr, mais il envoyait la surveillance
+    ///         sur le MAUVAIS RÔLE — le mode d'échec exact d'un contrôle qui passe à vide. Le risque de racine
+    ///         arbitraire existe bel et bien : il porte sur le **Safe**, et il est décrit là où il est, c'est-à-dire
+    ///         sur `postWeek` et `openDraw`.
+    ///         **Ce que le contrat garantit ici** : le keeper ne peut pas transférer de jetons vers une adresse de
+    ///         son choix, ni toucher aux stakes, ni aux enveloppes versées (`_free` les exclut), ni publier de
+    ///         racine, ni ouvrir de tirage, ni sortir un dollar du contrat. Prouvé par le COMPORTEMENT, pas par ce
+    ///         commentaire : `SpindexRewardsDomain.t.sol::test_C5_keeper_powers_are_exactly_burn` appelle depuis le
+    ///         keeper les dix fonctions `onlyOwner` et exige `NotOwner` sur chacune, puis exige que `burn` passe.
+    ///         **Ce qui reste ouvert** : le préavis de 48 h sur le keeper. L'argument qui le rendait inutile
+    ///         (« le keeper n'a aucun pouvoir de sortie de fonds ») a été retiré parce qu'il était faux DANS
+    ///         L'AUTRE SENS (le pouvoir de racine n'était pas le sien) ; la question est donc à retrancher sur une
+    ///         prémisse refaite, pas héritée.
     function setKeeper(address newKeeper) external onlyOwner {
         keeper = newKeeper;
         emit KeeperSet(newKeeper);
@@ -912,6 +965,19 @@ contract SpindexRewards {
         return _draws[weekId];
     }
 
+    /// @notice §12.1 : table CANONIQUE des étiquettes de domaine merkle de ce contrat, DANS L'ORDRE des deux
+    ///         arbres qu'il vérifie : [0] = arbre de paiement (`claim`), [1] = arbre de poids (`claimPrize`).
+    /// @dev    **Source unique.** Un test de parité d'étiquettes énumère d'ICI et nulle part ailleurs (KE#94) :
+    ///         une table recopiée dans un test dérive dès qu'un domaine est ajouté en production, et le contrôle
+    ///         reste vert sur l'ancienne liste. Le sens inverse — « toute étiquette DÉCLARÉE dans la source figure
+    ///         dans cette table » — n'est pas observable depuis l'EVM : il est tenu par le garde de source
+    ///         `script/domain_tag_gate.py`, appelé par le harnais de cassures.
+    ///         Le cardinal de la table EST le nombre de points d'entrée qui vérifient une feuille : ajouter un
+    ///         arbre sans ajouter son étiquette ici fait échouer le garde.
+    function domainTags() external pure returns (bytes32[2] memory) {
+        return [TAG_CLAIM, TAG_DRAW];
+    }
+
     /// @notice solde LIBRE d'un token : ce que le contrat détient au-delà de ses passifs (stakes, burns différés,
     ///         enveloppes de semaine non payées, dotations engagées). Assiette du burn et des dotations.
     function freeBalance(address token) external view returns (uint256) {
@@ -920,9 +986,14 @@ contract SpindexRewards {
 
     // ================================================================== interne : merkle (reconnaissance §5)
 
-    /// @dev paires triées, aucune dépendance externe. La feuille est DOUBLE hachée par l'appelant : le domaine des
-    ///      feuilles est séparé de celui des nœuds internes, donc une preuve de 64 octets ne peut pas être
-    ///      réinterprétée comme une feuille valide (seconde préimage).
+    /// @dev paires triées, aucune dépendance externe. DEUX séparations de domaine, indépendantes et cumulatives :
+    ///      (1) la feuille est DOUBLE hachée par l'appelant — le domaine des feuilles est séparé de celui des nœuds
+    ///      internes, donc une preuve de 64 octets ne peut pas être réinterprétée comme une feuille valide (seconde
+    ///      préimage) ; (2) la préimage porte en PREMIER MOT l'étiquette de son arbre (`TAG_CLAIM` / `TAG_DRAW`,
+    ///      §12.1) — une feuille d'un arbre n'est donc valide dans aucun autre arbre du système, y compris les
+    ///      arbres HORS CHAÎNE de l'indexeur, qui portent leurs propres étiquettes.
+    ///      `_verify` lui-même ne connaît AUCUNE des deux : les deux sont portées par la construction de la feuille,
+    ///      chez l'appelant. Cette fonction n'est donc pas le lieu où contrôler le domaine.
     function _verify(bytes32[] calldata proof, bytes32 root, bytes32 leaf) private pure returns (bool) {
         bytes32 h = leaf;
         for (uint256 i; i < proof.length; ++i) {

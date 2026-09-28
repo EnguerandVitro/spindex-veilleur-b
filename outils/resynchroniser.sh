@@ -44,6 +44,16 @@ chmod -R u+w "$RACINE/veilleur"
 python3 -B "$RACINE/outils/sceau.py" fabriquer || exit 2
 python3 -B "$RACINE/outils/sceau.py" vérifier  || exit 2
 
+# La convention merkle de la copie contre sa SOURCE (KE#137/#148) — pas contre son propre FIGE.json.
+PROJET="${SPINDEX_PROJET:-$(dirname "$RACINE")}"
+python3 -B "$RACINE/outils/conformite.py" recouper-source --projet "$PROJET" || exit 2
+python3 -B "$RACINE/outils/conformite.py" contrôler-générateur --projet "$PROJET" || {
+  echo "Les vecteurs dorés ne sont plus ceux de la source. LIRE le diff de" >&2
+  echo "  python3 -B outils/conformite.py générer --projet $PROJET   (puis git diff config/)" >&2
+  echo "avant de committer : une étiquette ou un champ a changé dans le contrat." >&2
+  exit 2; }
+python3 -B "$RACINE/outils/conformite.py" vérifier || exit 2
+
 APRES="$(python3 -B -c "
 import json;print(json.load(open('$RACINE/SCEAU.json',encoding='utf-8'))['empreinte_sources_attendue'])")"
 

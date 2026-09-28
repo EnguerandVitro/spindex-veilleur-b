@@ -16,6 +16,7 @@
 # Variables attendues (aucune valeur par défaut pour les secrets) :
 #   B_ETAT   dossier de travail        B_CONFIG  fichier de chaîne        B_TACHE  passe|differentiel-*
 #   B_LOT    dossier du lot publié     SPINDEX_B_RPC_URL  SPINDEX_B_ATTEST_KEY_HEX
+#   B_VECTEURS  (banc seulement) vecteurs de convention à la place de config/vecteurs-convention.json
 set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,10 +37,37 @@ mkdir -p "$ETAT/etat"
 echo "--- 1/6 sceau de la copie"
 "${PY[@]}" "$RACINE/outils/sceau.py" vérifier || exit 2
 
+# ---------------------------------------------------------------- 1bis. la copie calcule-t-elle les feuilles DU CONTRAT ?
+# Le sceau ne compare la copie qu a son propre FIGE.json : une copie périmée et son scellé périmé
+# s accordent parfaitement (4 jours sans séparation de domaine, lot C-4). Ici la référence ne vient
+# PAS de la copie : feuilles dorées calculées par cast depuis les étiquettes du contrat (KE#130/#137).
+echo "--- 1bis/6 convention merkle conforme au contrat"
+"${PY[@]}" "$RACINE/outils/conformite.py" vérifier --vecteurs "${B_VECTEURS:-$RACINE/config/vecteurs-convention.json}" || exit 2
+
 # ---------------------------------------------------------------- 2. configuration et clé (jamais imprimées)
 echo "--- 2/6 configuration"
 "${PY[@]}" "$RACINE/outils/preparer.py" --config "$CONFIG" --etat "$ETAT" || exit 2
 export SPINDEX_VEILLEUR_ENV="$ETAT/veilleur-b.env"
+
+# ---------------------------------------------------------------- 2bis. état d'un AUTRE déploiement ?
+# Au redéploiement, `outils/maj_chaine.py` change la configuration (commit humain, prouvé sur la chaîne), mais
+# l'état restauré depuis la branche porte le registre d'amorçage de l'ANCIEN contrat : la passe refuserait
+# pour toujours. L'ancien état est ARCHIVÉ (jamais détruit ; il reste dans l'histoire de la branche) et le
+# job ré-amorce. Ce n'est PAS déclenché par la chaîne : seule une configuration commitée le déclenche.
+if [ -f "$ETAT/etat/amorcage.json" ]; then
+  ANCIEN="$("${PY[@]}" - "$ETAT/etat/amorcage.json" "$CONFIG" <<'PYEOF'
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8")); c = json.load(open(sys.argv[2], encoding="utf-8"))
+cle = lambda d: (int(d["chain_id"]), str(d["rewards"]).lower(), int(d["deploy_block"]), str(d["tx_deploiement"]).lower())
+print("" if cle(r) == cle(c) else str(r["rewards"]).lower())
+PYEOF
+)" || { echo "ARRÊT : registre d amorçage ou configuration illisible." >&2; exit 2; }
+  if [ -n "$ANCIEN" ]; then
+    ARCH="$ETAT/etat-archive-$ANCIEN-$(date -u +%Y%m%dT%H%M%SZ)"
+    echo "--- 2bis/6 NOUVEAU DÉPLOIEMENT déclaré par la configuration : état de $ANCIEN archivé dans $ARCH"
+    mv "$ETAT/etat" "$ARCH" && mkdir -p "$ETAT/etat"
+  fi
+fi
 
 # ---------------------------------------------------------------- 3. compteur AVANT (jambe de progression)
 # Lu avant de lancer quoi que ce soit : c'est la valeur restaurée depuis la branche. Le jugement exige

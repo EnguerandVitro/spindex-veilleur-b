@@ -82,14 +82,22 @@ def mesurer_fenetre(reader, head=None, sondes=SONDES_MIN, tentatives_max=None):
             f"essai(s) : la mesure de sûreté n'est pas rendue sur moins de sondes que promis. "
             f"Échecs : {echecs}")
     retenue = min(reussies, key=lambda w: w["fenêtre_s"])
+    fmin = min(w["fenêtre_s"] for w in reussies)
+    # Nature de la borne agrégée. Le minimum d'un mélange est EXACT dès qu'une sonde exacte atteint
+    # ce minimum : c'est elle qui le porte. Il n'est un MINORANT que si toutes les sondes qui
+    # atteignent le minimum sont elles-mêmes des minorants (nœud d'archive). On ne promeut jamais un
+    # minorant en mesure — l'inverse serait un feu vert tiré d'une inégalité (KE#121).
+    borne = ("exacte" if any(w.get("borne", "exacte") == "exacte" and w["fenêtre_s"] == fmin
+                             for w in reussies) else "minorant")
     out = dict(retenue)
     out.update({
-        "fenêtre_s": min(w["fenêtre_s"] for w in reussies),
+        "fenêtre_s": fmin,
         "profondeur_ok_max_blocs": min(w["profondeur_ok_max_blocs"] for w in reussies),
+        "borne": borne,
         "agrégat": AGREGAT,
         "n_sondes": len(reussies),
         "sondes": [{"tête": w.get("tête"), "profondeur_ok_max_blocs": w["profondeur_ok_max_blocs"],
-                    "fenêtre_s": w["fenêtre_s"],
+                    "fenêtre_s": w["fenêtre_s"], "borne": w.get("borne", "exacte"),
                     "secondes_par_bloc": (w.get("cadence") or {}).get("secondes_par_bloc")}
                    for w in reussies],
         "sondes_en_échec": echecs,
@@ -101,6 +109,12 @@ def mesurer_fenetre(reader, head=None, sondes=SONDES_MIN, tentatives_max=None):
 
 def _agregee(m):
     return m.get("agrégat") == AGREGAT and (m.get("n_sondes") or 0) >= SONDES_MIN
+
+
+def _exacte(m):
+    """Une mesure ANTÉRIEURE à la distinction n'en porte pas : elle vient forcément d'un nœud qui
+    refusait une profondeur (sans quoi elle n'existerait pas), donc elle est exacte."""
+    return m.get("borne", "exacte") == "exacte"
 
 
 class WindowHistory:
@@ -115,13 +129,23 @@ class WindowHistory:
 
     @property
     def meilleure_s(self):
-        """Meilleure fenêtre relevée PARMI les mesures agrégées (minimum d'au moins 3 sondes) seulement."""
-        vals = [m["fenêtre_s"] for m in self.data["mesures"] if m.get("fenêtre_s") and _agregee(m)]
+        """Meilleure fenêtre relevée PARMI les mesures agrégées (minimum d'au moins 3 sondes) ET
+        EXACTES. Un MINORANT ne peut pas servir de référence de dérive : « au moins 31 200 s »
+        relevé sur un nœud d'archive ferait passer toute mesure exacte ultérieure pour un
+        effondrement de 98 %. C'est la même faute que la « meilleure » prise sur le nœud le plus
+        généreux (KE#133), un cran plus loin : là, la référence ne serait même pas une mesure."""
+        vals = [m["fenêtre_s"] for m in self.data["mesures"]
+                if m.get("fenêtre_s") and _agregee(m) and _exacte(m)]
         return max(vals) if vals else None
 
     @property
     def mesures_mono_sonde_ignorees(self):
         return sum(1 for m in self.data["mesures"] if m.get("fenêtre_s") and not _agregee(m))
+
+    @property
+    def mesures_minorants_ignorees(self):
+        return sum(1 for m in self.data["mesures"]
+                   if m.get("fenêtre_s") and _agregee(m) and not _exacte(m))
 
     def ajouter(self, mesure):
         self.data["mesures"].append({
@@ -129,6 +153,7 @@ class WindowHistory:
             "tête": mesure.get("tête"),
             "blocs": mesure.get("profondeur_ok_max_blocs"),
             "fenêtre_s": mesure.get("fenêtre_s"),
+            "borne": mesure.get("borne", "exacte"),
             "sonde": mesure.get("sonde"),
             "agrégat": mesure.get("agrégat"),
             "n_sondes": mesure.get("n_sondes"),
@@ -154,6 +179,31 @@ class WindowHistory:
                               f"{SONDES_MIN} sondes (KE#133). Non jugée."}]
         num, den = MULTIPLE_P1
         multiple = round(f / besoin_s, 2)
+        if not _exacte(mesure):
+            # MINORANT (nœud d'archive) : on sait que la fenêtre vaut AU MOINS `f`, pas ce qu'elle
+            # vaut. Deux conséquences, et une seule est un feu vert.
+            if f < besoin_s:
+                return [{
+                    "gravité": "P1", "source": "fenêtre d'état", "clé": "fenêtre_minorant_sous_besoin",
+                    "motif": f"minorant de fenêtre {f} s < besoin {besoin_s} s : la sonde n'a trouvé "
+                             f"aucune limite jusqu'à {mesure.get('profondeur_ok_max_blocs')} blocs, ce "
+                             f"qui ne suffit PAS à couvrir le besoin. On ne conclut ni au respect ni à "
+                             f"la violation : on ne sait pas.",
+                    "conséquence": "remède : augmenter SPINDEX_WINDOW_MAX_DEPTH jusqu'à ce que le "
+                                   "minorant dépasse le besoin, ou mesurer ce nœud autrement.",
+                    "fenêtre_s": f, "besoin_s": besoin_s, "borne": "minorant",
+                }]
+            return [{
+                "gravité": "INFO", "source": "fenêtre d'état", "clé": "fenêtre_minorant",
+                "motif": f"nœud d'ARCHIVE : la fenêtre vaut AU MOINS {f} s (×{multiple} du besoin de "
+                         f"{besoin_s} s), la sonde n'a trouvé aucune limite jusqu'à "
+                         f"{mesure.get('profondeur_ok_max_blocs')} blocs de profondeur.",
+                "à_savoir": "un minorant couvre le besoin mais ne mesure pas la fenêtre : aucune "
+                            "dérive n'est calculable, et ce chiffre n'entre pas dans la référence "
+                            "« meilleure relevée ».",
+                "fenêtre_s": f, "besoin_s": besoin_s, "multiple_du_besoin": multiple,
+                "borne": "minorant",
+            }]
         if f < besoin_s:
             out.append({
                 "gravité": "P0", "source": "fenêtre d'état", "clé": "fenêtre_sous_besoin",
@@ -180,7 +230,10 @@ class WindowHistory:
                 "motif": "aucune mesure agrégée antérieure : aucune dérive n'est calculable. Ce n'est pas "
                          "« pas de dérive », c'est « pas encore de référence » (KE#111)"
                          + (f" ; {self.mesures_mono_sonde_ignorees} mesure(s) à sonde unique ignorée(s) "
-                            f"comme référence (KE#133)." if self.mesures_mono_sonde_ignorees else "."),
+                            f"comme référence (KE#133)" if self.mesures_mono_sonde_ignorees else "")
+                         + (f" ; {self.mesures_minorants_ignorees} minorant(s) de nœud d'archive "
+                            f"ignoré(s) comme référence" if self.mesures_minorants_ignorees else "")
+                         + ".",
             })
         elif f * 10_000 < ref * (10_000 - tolerance_bps):
             recul = round((1 - f / ref) * 100, 2)

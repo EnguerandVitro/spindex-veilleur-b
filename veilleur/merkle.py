@@ -1,19 +1,32 @@
-"""Arbre merkle à la convention de `SpindexRewards` (§9 / §20), et rien d'autre.
+"""Arbre merkle à la convention de `SpindexRewards` (§9 / §12.1 / §20), et rien d'autre.
 
-Convention, lue dans `_verify` du contrat et dans la convention SCELLÉE de `rewards_constants.json` :
-  - feuille : DOUBLE hachée — `keccak256(bytes.concat(keccak256(abi.encode(...))))`. Le double hachage
-    sépare le domaine des feuilles de celui des nœuds internes : une preuve de 64 octets ne peut pas
-    être réinterprétée en feuille valide ;
+**Ce module ne décrit plus la convention : il la LIT, et il REFUSE DE SE CHARGER si elle a
+bougé.** C'est le correctif du défaut relevé par l'atelier Rewards : la convention était
+recopiée EN PROSE dans cette docstring, `rewards_constants.json` n'était lu nulle part, et il
+n'existait donc aucun arrêt bruyant. Le jour où la séparation de domaine est entrée dans le
+contrat, ce module aurait continué à calculer des feuilles périmées — et les contrôles `PW-A`
+et `OD-A` auraient rapporté « la racine publiée ne correspond pas à la table », c'est-à-dire
+une divergence de RACINE imputée à l'exploitant, alors que le défaut était une obsolescence
+de MODULE. Un veilleur qui accuse à tort est pire qu'un veilleur muet.
+
+Ce que la convention dit, tel qu'il est vérifié au chargement par `convention.charger()` :
+  - feuille : `keccak256(bytes.concat(keccak256(abi.encode(TAG, …))))` — DOUBLE hachage (une
+    preuve de 64 octets ne peut pas être relue comme une feuille) ET **étiquette de domaine
+    en PREMIER MOT** de chaque préimage ;
   - nœud   : `keccak256(min(a,b) ‖ max(a,b))` — PAIRES TRIÉES ;
-  - niveau impair : le dernier nœud est PROMU TEL QUEL, **jamais dupliqué**. Dupliquer rendrait deux
-    arbres distincts identiques, et c'est la forme classique qui casse l'unicité de la racine.
+  - niveau impair : dernier nœud PROMU TEL QUEL, jamais dupliqué.
 
-Ce module est réimplémenté en Python alors que `MerkleBuilder.sol` existe déjà : c'est donc un
-RÉIMPLÉMENTEUR DE VÉRIFICATEUR (KE#119). Il est par conséquent soumis à un test DIFFÉRENTIEL contre
-les racines produites par le Solidity, sur des cardinaux pairs ET impairs (`bench/test_merkle.py`),
-et l'invariant n'est pas « même résultat sur un cas » mais « même racine sur tout l'échantillon, y
-compris les cardinaux impairs où la promotion du nœud orphelin se joue ».
+Les étiquettes (`TAG_CLAIM`, `TAG_DRAW`) ne sont pas transcrites ici : elles viennent de
+`rewards_constants.json`, et leur empreinte y est confrontée au keccak de leur préimage citée
+(KE#130 / KE#119). La table canonique côté contrat reste `SpindexRewards.domainTags()`.
+
+Ce module reste un RÉIMPLÉMENTEUR DE VÉRIFICATEUR (KE#119) : il est donc soumis à un test
+DIFFÉRENTIEL contre les racines produites par `MerkleBuilder.sol`, sur des cardinaux pairs ET
+impairs (`bench/test_merkle.py`), et l'invariant n'est pas « même résultat sur un cas » mais
+« même racine sur tout l'échantillon, y compris les cardinaux impairs où se joue la promotion
+du nœud orphelin ».
 """
+from . import convention as _convention
 from .chainabi import keccak256, enc_address, enc_uint
 
 
@@ -21,17 +34,44 @@ class MerkleError(RuntimeError):
     pass
 
 
+# ── ARRÊT AU CHARGEMENT ──────────────────────────────────────────────────────────────────
+# Si la convention scellée n'est plus celle de ce module, l'import lève. C'est voulu : un
+# module de calcul de feuilles qui se charge à moitié calcule des feuilles à moitié fausses,
+# et le contrôle qui les compare accuse l'exploitant. `convention.py` ne lève RIEN à l'import,
+# de sorte que `outils/faire_lot_public.py` — l'outil qui RÉPARE un lot périmé — reste
+# importable même quand ce module-ci refuse (KE#105 : ne pas murer le chemin de réparation).
+CONVENTION = _convention.defaut()
+TAG_CLAIM = CONVENTION.tag("claim")
+TAG_DRAW = CONVENTION.tag("draw")
+
+
+def _enc_bytes32(b: bytes) -> bytes:
+    if not isinstance(b, (bytes, bytearray)) or len(bytes(b)) != 32:
+        raise MerkleError(f"ARRÊT : étiquette de domaine qui n'est pas un mot de 32 octets : {b!r}")
+    return bytes(b)
+
+
 def leaf_week(player: str, week_id: int, rakeback_usdg: int, revshare_usdg: int) -> bytes:
-    """`keccak256(bytes.concat(keccak256(abi.encode(address, uint256, uint256, uint256))))`."""
-    inner = keccak256(enc_address(player) + enc_uint(week_id) + enc_uint(rakeback_usdg)
-                      + enc_uint(revshare_usdg))
+    """Feuille de l'arbre de PAIEMENT hebdomadaire.
+
+    `keccak256(bytes.concat(keccak256(abi.encode(TAG_CLAIM, address, uint256, uint256,
+    uint256))))`. L'étiquette est le PREMIER mot : sans elle, cette feuille est bit pour bit
+    la feuille de saison de l'indexeur (même forme ABI, même double keccak) — défaut F03.
+    """
+    inner = keccak256(_enc_bytes32(TAG_CLAIM) + enc_address(player) + enc_uint(week_id)
+                      + enc_uint(rakeback_usdg) + enc_uint(revshare_usdg))
     return keccak256(inner)
 
 
-def leaf_draw(player: str, week_id: int, index: int, cumulative_from: int, cumulative_to: int) -> bytes:
-    """`abi.encode(address player, uint256 weekId, uint256 index, uint256 from, uint256 to)`."""
-    inner = keccak256(enc_address(player) + enc_uint(week_id) + enc_uint(index)
-                      + enc_uint(cumulative_from) + enc_uint(cumulative_to))
+def leaf_draw(player: str, week_id: int, index: int, cumulative_from: int,
+              cumulative_to: int) -> bytes:
+    """Feuille de l'arbre des POIDS de tirage.
+
+    `abi.encode(TAG_DRAW, address player, uint256 weekId, uint256 index, uint256 from,
+    uint256 to)`.
+    """
+    inner = keccak256(_enc_bytes32(TAG_DRAW) + enc_address(player) + enc_uint(week_id)
+                      + enc_uint(index) + enc_uint(cumulative_from) + enc_uint(cumulative_to))
     return keccak256(inner)
 
 

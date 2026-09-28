@@ -14,13 +14,24 @@ calme (KE#105).
 
 Mesure de l'atelier 0 reprise telle quelle : le 429 de ce nœud arrive avec un **statut HTTP 429** ET
 un corps qui a la FORME d'une erreur JSON-RPC. Les deux chemins sont traités.
+
+Et une troisième forme, mesurée le 2026-09-24 sur dRPC : une erreur **applicative** JSON-RPC servie
+dans un corps **HTTP 400**. Tant que le transport avalait ces corps, l'erreur n'atteignait jamais le
+classificateur : elle ressortait en `kind: http`, c'est-à-dire « le réseau a mal répondu », alors
+que le nœud avait parfaitement compris la question et refusé de répondre. Le statut est CONSERVÉ
+(`http_status`) — on ne le perd pas, on cesse simplement de s'arrêter à lui.
+
+Rien de ce qui est SPÉCIFIQUE à un fournisseur ne vit ici : les signatures de refus et les profils
+mesurés sont dans `fournisseurs.py`, et la taille de plage comme l'en-tête viennent de `.env`.
 """
 import json
 import random
-import re
 import time
 import urllib.error
 import urllib.request
+
+from .fournisseurs import (CLASSES_DECOUPABLES, MOTIF_USER_AGENT_REFUSE, SPAN_LOGS_DEFAUT,
+                           SPAN_LOGS_PLANCHER, USER_AGENT_DEFAUT, classer, explique)
 
 # Liste BLANCHE. Toute méthode absente est refusée côté client, avant le réseau.
 READ_ONLY_METHODS = frozenset({
@@ -49,19 +60,26 @@ FORBIDDEN_METHODS = frozenset({
 })
 
 
-# Erreurs de TAILLE de plage explicitement reconnues pour `eth_getLogs`. C'est la SEULE cause qui autorise à
-# découper une plage. Un 429 n'est pas une plage trop large : découper sur un 429 multiplie les appels au moment
-# précis où le nœud demande d'en faire moins (mesuré le 2026-09-21 : 16 tranches sur 40 en échec sur un contrat
-# actif, avec l'ancien code qui divisait la plage par 4). Le message de ce nœud ment sur sa nature
-# (« limit of 10000 » est une limite de PLAGE) : il est reconnu ici tel qu'il est.
-ERREUR_DE_PLAGE = re.compile(
-    r"(block range|range (is )?too (large|wide|big)|limit of \d+|query returned more than|"
-    r"too many (results|logs|blocks)|exceed(s|ed)? (the )?(max|limit|range)|response size)",
-    re.IGNORECASE)
-
-
+# Découper une plage de journaux est autorisé par DEUX classes de refus seulement, et ces classes
+# sont établies par des messages MESURÉS (`fournisseurs.SIGNATURES`), plus par une expression
+# régulière écrite de mémoire. Un 429 n'est pas une plage trop large : découper sur un 429 multiplie
+# les appels au moment précis où le nœud demande d'en faire moins (mesuré le 2026-09-21 : 16 tranches
+# sur 40 en échec sur un contrat actif, avec l'ancien code qui divisait la plage par 4).
 def est_erreur_de_plage(r):
-    return r.get("kind") == "rpc_error" and bool(ERREUR_DE_PLAGE.search(str(r.get("message") or "")))
+    """Vrai UNIQUEMENT si le refus appartient à une classe mesurée qui autorise le découpage."""
+    return classer(r)[0] in CLASSES_DECOUPABLES
+
+
+def _erreur_jsonrpc(corps):
+    """Rend le dict `error` si `corps` est une réponse JSON-RPC en erreur, sinon None. Jamais
+    d'exception : un corps HTML de frontal doit rester un refus de transport, pas un plantage."""
+    try:
+        d = json.loads(corps)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(d, dict) and isinstance(d.get("error"), dict):
+        return d["error"]
+    return None
 
 
 def _retry_after(v):
@@ -81,6 +99,42 @@ class RpcUnavailable(RuntimeError):
     """Le RPC n'a pas répondu utilement. JAMAIS à confondre avec « rien à signaler »."""
 
 
+def verifier_user_agent(ua):
+    """L'en-tête est CONFIGURABLE mais pas libre : `Python-urllib/*` — celui que `urllib` pose tout
+    seul quand on n'en met aucun — est refusé en 403 par les TROIS fournisseurs mesurés (Cloudflare,
+    « error code: 1010 »). Le laisser passer produirait une panne de lecture totale dont le motif
+    n'apparaîtrait nulle part."""
+    if not ua or not str(ua).strip():
+        raise RpcRefused(
+            "ARRÊT : user-agent vide. Sans en-tête explicite, `urllib` pose « Python-urllib/… », "
+            "que les trois fournisseurs mesurés refusent en 403 (Cloudflare 1010).")
+    if MOTIF_USER_AGENT_REFUSE.match(str(ua)):
+        raise RpcRefused(
+            f"ARRÊT : user-agent « {ua} » — MESURÉ refusé en 403 par les trois fournisseurs "
+            f"(Cloudflare « error code: 1010 »). Posez SPINDEX_RPC_USER_AGENT à autre chose.")
+    return str(ua)
+
+
+def verifier_span(n):
+    n = int(n)
+    if n < SPAN_LOGS_PLANCHER:
+        raise RpcRefused(
+            f"ARRÊT : taille de plage de journaux {n} < plancher {SPAN_LOGS_PLANCHER}. Sous ce "
+            f"plancher, le découpage ne converge plus : c'est un fournisseur à mesurer, pas une "
+            f"valeur à baisser.")
+    return n
+
+
+def client_depuis(settings):
+    """Construit le client AVEC les réglages du fournisseur configuré. Point unique : un appelant qui
+    ferait `RpcClient(s.rpc_url)` tout seul retomberait sur les défauts du paquet, c'est-à-dire sur
+    les hypothèses d'un AUTRE fournisseur que celui qui est en face."""
+    return RpcClient(
+        settings.rpc_url,
+        user_agent=getattr(settings, "rpc_user_agent", USER_AGENT_DEFAUT),
+        max_log_span=getattr(settings, "rpc_max_log_span", SPAN_LOGS_DEFAUT))
+
+
 class RpcClient:
     # Sur 429 : attente, JAMAIS de découpage. `Retry-After` respecté s'il est présent (plafonné), sinon repli
     # exponentiel borné. Le total d'attente par appel est borné aussi : au-delà, l'appel ÉCHOUE bruyamment.
@@ -89,14 +143,25 @@ class RpcClient:
     ESSAIS_429_MAX = 8
     ATTENTE_429_TOTALE_MAX_S = 120.0
 
-    def __init__(self, url, timeout=120, max_retries=4, user_agent="spindex-veilleur/1 (read-only)"):
+    # Un découpage de plage divise par 4 : depuis 1 000 blocs, trois découpages suffisent à atteindre
+    # le plancher. Au-delà, ce n'est plus un ajustement, c'est une boucle — et elle s'arrête ici,
+    # bruyamment, en nommant la valeur à poser dans `.env`.
+    DECOUPAGES_MAX = 6
+
+    def __init__(self, url, timeout=120, max_retries=4, user_agent=USER_AGENT_DEFAUT,
+                 max_log_span=SPAN_LOGS_DEFAUT):
         self.url = url
         self.timeout = timeout
         self.max_retries = max_retries
-        self.ua = user_agent
+        self.ua = verifier_user_agent(user_agent)
+        self.max_log_span = verifier_span(max_log_span)
         self._sleep = time.sleep
         self.stats = {"calls": 0, "http": {}, "transport": 0, "rpc_error": 0, "http_429": 0, "retries": 0,
-                      "attente_429_s": 0.0, "plages_découpées": 0}
+                      "attente_429_s": 0.0, "plages_découpées": 0,
+                      # Dernière taille de tranche réellement utilisée : c'est elle qui dit à
+                      # l'exploitant quoi poser dans SPINDEX_RPC_MAX_LOG_SPAN pour cesser de payer
+                      # trois appels de découverte à chaque passe.
+                      "span_logs": int(max_log_span)}
 
     # ------------------------------------------------------------------ transport
 
@@ -125,11 +190,28 @@ class RpcClient:
             return {"kind": "ok", "result": d, "dt": time.time() - t0, "bytes": len(raw)}
         except urllib.error.HTTPError as e:
             self.stats["http"][e.code] = self.stats["http"].get(e.code, 0) + 1
+            corps = e.read()[:400].decode("utf-8", "replace")
+            # ORDRE VOULU (KE#138) : le plus spécifique d'abord, le fourre-tout EN DERNIER.
+            # 1. limitation de débit : elle se traite par l'ATTENTE, quel que soit le corps.
             if e.code == 429:
                 self.stats["http_429"] += 1
+                return {"kind": "http", "status": 429,
+                        "retry_after": _retry_after(e.headers.get("Retry-After")) if e.headers else None,
+                        "body": corps[:250], "dt": time.time() - t0}
+            # 2. erreur APPLICATIVE JSON-RPC servie dans un corps 4xx (mesuré sur dRPC le 2026-09-24 :
+            #    HTTP 400 + {"error":{"message":"ranges over 10000 blocks…","code":35}}). Le nœud a
+            #    compris la question et l'a refusée : c'est une `rpc_error`, pas une panne de
+            #    transport. Le statut est conservé, il n'est simplement plus terminal.
+            err = _erreur_jsonrpc(corps)
+            if err is not None:
+                self.stats["rpc_error"] += 1
+                return {"kind": "rpc_error", "code": err.get("code"),
+                        "message": str(err.get("message"))[:400], "http_status": e.code,
+                        "dt": time.time() - t0}
+            # 3. fourre-tout : un refus HTTP sans corps exploitable.
             return {"kind": "http", "status": e.code,
                     "retry_after": _retry_after(e.headers.get("Retry-After")) if e.headers else None,
-                    "body": e.read()[:250].decode("utf-8", "replace"), "dt": time.time() - t0}
+                    "body": corps[:250], "dt": time.time() - t0}
         except Exception as e:  # noqa: BLE001 — tout le reste est du transport, et se dit
             self.stats["transport"] += 1
             return {"kind": "transport", "error": repr(e)[:250], "dt": time.time() - t0}
@@ -228,35 +310,73 @@ class RpcClient:
 
     # ------------------------------------------------------------------ journaux par tranches
 
-    def get_logs_chunked(self, address, topics, from_block, to_block, max_span=1000, timeout=None):
+    def get_logs_chunked(self, address, topics, from_block, to_block, max_span=None, timeout=None,
+                         sans_adresse=False):
         """Ramène TOUS les journaux de la plage, par tranches.
 
-        Mesure de l'atelier 0 : une plage ≤ ~1 000 blocs n'a aucune limite de RÉSULTATS ; au-delà, le nœud
-        refuse à 10 000 journaux avec un message qui ment sur sa nature (« limit of 10000 » est en réalité
-        une limite de PLAGE). On reste donc sous la plage sûre et on réduit encore en cas de refus.
+        La taille de tranche vient de la CONFIGURATION (`SPINDEX_RPC_MAX_LOG_SPAN`), pas d'une
+        constante du code : elle est spécifique au fournisseur. Mesures du 2026-09-24 sur la 46630 —
+        nœud officiel : aucune limite de plage, mais 10 000 journaux maximum ; publicnode : 50 000
+        blocs ; dRPC : **101 blocs**, avec un message qui annonce 10 000 et ment.
+
+        En cas de refus, le découpage n'est autorisé QUE par une classe de refus mesurée
+        (`fournisseurs.CLASSES_DECOUPABLES`). Un refus inconnu est un ARRÊT qui nomme le remède :
+        deviner « c'est sûrement une plage trop large » ferait redécouper en boucle sur une panne
+        qui n'a rien à voir.
 
         Assertion de COUVERTURE (KE#111) : la réunion des tranches doit recouvrir EXACTEMENT
         [from_block, to_block]. Une tranche perdue ne doit pas produire une liste plausible.
         """
         if to_block < from_block:
             raise ValueError("plage vide : to_block < from_block")
+        if not address and not sans_adresse:
+            # Hypothèse de fournisseur, mesurée le 2026-09-24 : publicnode REFUSE toute requête de
+            # journaux sans filtre d'adresse (« Please specify an address in your request … »), à
+            # 100 blocs comme à 10 000. Aucun découpage ne répare ça. Un appelant qui veut vraiment
+            # lire sans filtre le DIT (`sans_adresse=True`) et sait que ça ne marche pas partout.
+            raise RpcRefused(
+                "REFUS DU CLIENT : lecture de journaux SANS filtre d'adresse. Au moins un des "
+                "fournisseurs mesurés la refuse quelle que soit la plage, et un contrôle ne doit pas "
+                "dépendre d'un nœud en particulier. Passez `sans_adresse=True` si c'est voulu.")
         out = []
         covered = []
         cur = from_block
-        span = max_span
+        span = verifier_span(max_span if max_span is not None else self.max_log_span)
+        decoupages = 0
         while cur <= to_block:
             hi = min(cur + span - 1, to_block)
             r = self.get_logs(address, topics, cur, hi, timeout=timeout)
             if r["kind"] != "ok":
-                # On ne découpe QUE sur une erreur de taille de plage explicitement reconnue. Un 429 (déjà
-                # attendu par `_with_backoff`), un transport, une autre erreur : échec BRUYANT, sans
-                # multiplier les appels.
-                if est_erreur_de_plage(r) and span > 16:
-                    span = max(16, span // 4)
+                # Un 429 est déjà attendu par `_with_backoff` ; s'il ressort ici c'est qu'il persiste.
+                if est_erreur_de_plage(r) and span > SPAN_LOGS_PLANCHER:
+                    decoupages += 1
+                    if decoupages > self.DECOUPAGES_MAX:
+                        raise RpcUnavailable(
+                            f"eth_getLogs [{cur},{hi}] : {decoupages} découpages sur un seul appel, "
+                            f"au-delà de {self.DECOUPAGES_MAX}. Ce n'est plus un ajustement, c'est une "
+                            f"boucle : posez SPINDEX_RPC_MAX_LOG_SPAN à la taille mesurée de ce "
+                            f"fournisseur. Dernier refus : {json.dumps(r, ensure_ascii=False)[:300]}")
+                    span = max(SPAN_LOGS_PLANCHER, span // 4)
                     self.stats["plages_découpées"] += 1
+                    self.stats["span_logs"] = span
                     continue
+                if est_erreur_de_plage(r):
+                    pourquoi = (f"plage déjà réduite au plancher de {span} blocs, et ce fournisseur "
+                                f"la refuse encore")
+                elif r["kind"] == "transport":
+                    # Le réseau, pas le nœud : parler ici de « signature inconnue » enverrait
+                    # l'exploitant mesurer un fournisseur qui n'a jamais répondu.
+                    pourquoi = "panne de TRANSPORT (le nœud n'a pas répondu), rien à classer"
+                elif r["kind"] == "http" and r.get("status") == 429:
+                    # Arbitrage Q4 : sur un 429 on ATTEND (`_with_backoff`), on ne découpe JAMAIS.
+                    # S'il ressort jusqu'ici, c'est que l'attente bornée n'a pas suffi.
+                    pourquoi = ("limitation de débit persistante — on ne découpe JAMAIS sur un 429 : "
+                                "cela multiplierait les appels au moment précis où le nœud en demande "
+                                "moins")
+                else:
+                    pourquoi = explique(r)
                 raise RpcUnavailable(
-                    f"eth_getLogs [{cur},{hi}] a échoué ({'plage déjà réduite à ' + str(span) + ' blocs' if est_erreur_de_plage(r) else 'erreur non liée à la taille de plage : pas de découpage'}) : "
+                    f"eth_getLogs [{cur},{hi}] a échoué ({pourquoi}) : "
                     f"{json.dumps(r, ensure_ascii=False)[:300]}")
             out.extend(r["result"])
             covered.append((cur, hi))

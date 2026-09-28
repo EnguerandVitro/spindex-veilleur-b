@@ -8,5 +8,5 @@ Ce qu'il tient : la garantie de `REWARDS_SPEC.md` §21, qu'aucun code de contrat
 et `openDraw` acceptent une racine merkle ARBITRAIRE ; la borne réelle est hors chaîne. Sans ce
 composant, le pouvoir du Safe sur les dotations et les enveloppes n'est borné par personne.
 """
-__all__ = ["config", "rpc", "chainabi", "merkle", "tables", "reconstruct", "chainread",
-           "controls", "ledger", "longfuse", "verdict", "attest", "service"]
+__all__ = ["config", "rpc", "chainabi", "convention", "merkle", "tables", "reconstruct",
+           "chainread", "controls", "ledger", "longfuse", "verdict", "attest", "service"]

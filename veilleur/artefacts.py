@@ -134,7 +134,17 @@ def lot_par_defaut():
 
 
 def racine_par_defaut():
-    """Lot embarqué s'il existe, sinon l'arbre `contracts/` voisin. Jamais de chemin en dur."""
+    """Lot embarqué s'il existe, sinon l'arbre `contracts/` voisin. Jamais de chemin en dur.
+
+    `SPINDEX_VEILLEUR_ARTEFACTS` surcharge la résolution. Elle existe pour deux usages, et rien
+    n'y touche en production : un tiers qui range le lot ailleurs, et le banc, qui doit pouvoir
+    OBSERVER le refus au chargement contre un arbre d'artefacts périmé. Le banc ne la pose que
+    dans un sous-processus, explicitement — jamais en préambule global, qui ferait passer un
+    autre arbre devant celui qu'on croit mesurer (KE#106).
+    """
+    force = os.environ.get("SPINDEX_VEILLEUR_ARTEFACTS")
+    if force:
+        return force
     lot = lot_par_defaut()
     if os.path.exists(os.path.join(lot, MANIFESTE)):
         return lot

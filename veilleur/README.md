@@ -103,6 +103,31 @@ dépendances rendues inimportables, et exige la même empreinte.
 Deux portées : **`table seule`** (sans RPC — racine, pavage, totaux, doublons ; rejouable pour
 toujours, **ne vaut jamais feu vert**) et **`complète`** (avec RPC, dans la fenêtre d'état).
 
+## La convention merkle est LUE, jamais recopiée — et le lot publié doit être à jour
+
+`convention.py` est le **seul** lecteur de la convention merkle et des étiquettes de domaine
+(`TAG_CLAIM`, `TAG_DRAW`, `TAG_SEASON`) ; il les prend dans `rewards_constants.json` et **recalcule**
+chaque étiquette depuis la préimage citée avant de la croire. `merkle.py` et `chainabi.py` la lui
+demandent. Aucune autre copie n'est tolérée : `bench/test_convention_domaine.py` balaie le paquet et
+rougit si le texte de la convention réapparaît ailleurs.
+
+**Conséquence d'exploitation.** `merkle.py` **refuse de se charger** contre des artefacts dont la
+convention a bougé. Un lot publié fabriqué avant la séparation de domaine (§12.1) n'en porte aucune
+étiquette : le veilleur s'arrête en le disant, et en nommant le remède. Le lot embarqué
+(`veilleur/public/`) doit donc être refait à chaque changement du contrat :
+
+```bash
+python3 -B -m veilleur.outils.faire_lot_public          # exige contracts/out à jour
+```
+
+`faire_lot_public` refuse de fabriquer un lot dont l'ABI n'a pas été compilée sur la source
+présente ; si elle refuse, c'est `contracts/out` qu'il faut régénérer, pas le lot.
+
+Pourquoi ce soin : sans étiquette, la feuille de paiement `claim` et la feuille de classement de
+saison de l'indexeur sont **le même mot** — mêmes types ABI, même double keccak. Mesuré :
+`0x2d935f84…` pour les deux. Une feuille de saison, publiée en clair par l'indexeur, était donc
+directement encaissable dans l'arbre `claim`.
+
 ## Le compte à rebours J+90 / J+30
 
 ```bash
@@ -160,6 +185,34 @@ python3 -B -m veilleur surveiller --depuis-zéro                             # r
   (KE#130).
 - **429** : attente (`Retry-After`, sinon exponentielle bornée), jamais de découpage de plage ; la plage ne
   se découpe que sur une erreur de TAILLE reconnue.
+- **Le fournisseur RPC est une DÉPENDANCE MESURÉE, pas une évidence** (2026-09-24). Les deux instances
+  doivent tourner sur deux fournisseurs INDÉPENDANTS pour que leur accord prouve quelque chose ; le
+  jour où `b` est passé sur dRPC, sa passe est tombée sur des refus que le code ne savait pas lire.
+  Trois conséquences, toutes dans `fournisseurs.py` :
+  - **table de signatures MESURÉES** — chaque forme de refus reconnue vient d'une capture réelle
+    (`mesures/rpc-fournisseurs-2026-09-24.json`) et le banc la rejoue telle quelle. Un message inconnu
+    est un ARRÊT qui nomme le remède, **jamais** une supposition : deviner « plage trop large » ferait
+    redécouper à l'infini sur une panne qui n'a rien à voir. Aucun motif fourre-tout (KE#138).
+  - **ce qui est spécifique à un fournisseur est CONFIGURABLE et DÉCLARÉ** — `SPINDEX_RPC_PROFIL`,
+    `SPINDEX_RPC_MAX_LOG_SPAN`, `SPINDEX_RPC_USER_AGENT`, `SPINDEX_WINDOW_MAX_DEPTH`. Plages de
+    journaux mesurées : **101 blocs** sur dRPC (dont le message en annonce 10 000 — il ment),
+    50 000 sur publicnode, illimitée sur le nœud officiel mais plafonnée à 10 000 **journaux**.
+    Le battement expose `plages_découpées` : non nul, c'est le signal de poser `MAX_LOG_SPAN`.
+  - **une erreur applicative peut arriver dans un corps HTTP 4xx** (dRPC : 400). Elle ressort en
+    `rpc_error` avec son `http_status` ; l'ordre du tri met la limitation de débit en premier et le
+    fourre-tout de transport en dernier.
+- **Fenêtre d'état sur un nœud d'ARCHIVE** : la dichotomie cherchait une profondeur REFUSÉE pour se
+  borner ; sur dRPC, qui sert l'état à toute profondeur, elle n'en trouvait aucune et la mesure
+  échouait — le nœud le plus généreux des trois était le seul déclaré inutilisable. Elle rend
+  désormais un **MINORANT** déclaré (`borne: "minorant"`, « au moins N secondes », borné par
+  `SPINDEX_WINDOW_MAX_DEPTH`). Deux garde-fous vont avec, et ils sont indissociables :
+  - **témoin positif obligatoire** (KE#121) — la sonde doit savoir dire NON, prouvé à chaque mesure
+    sur un bloc en avance de 1 000 000 sur la tête. Sans lui, « au moins N » serait aussi ce que
+    rendrait une sonde en panne, et ce serait un feu vert permanent ;
+  - **un minorant n'entre jamais dans la référence de dérive** — « au moins 8 h » relevé une fois
+    ferait passer toute mesure exacte ultérieure pour un effondrement de 98 %. Un minorant au-dessus
+    du besoin est un INFO ; en dessous, c'est un P1 `fenêtre_minorant_sous_besoin` qui dit « on ne
+    sait pas » et nomme le réglage, jamais un P0 (on n'a pas prouvé la violation non plus).
 - **Unités** (`systemd/`) : gabarits `@a` / `@b`, aucun `${VAR}` dans `ExecStart`, aucun `EnvironmentFile=`.
 - **Garde de chaîne** (arbitrage 2026-09-22) : chaque passe, chaque différentiel et chaque vérification signée
   relisent `eth_chainId` AVANT toute autre lecture et le comparent à `SPINDEX_CHAIN_ID` ET à la chaîne de

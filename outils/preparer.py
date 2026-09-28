@@ -123,6 +123,48 @@ def periode_du_cron(chemin=WORKFLOW):
     return int(m.group(1)) * 60
 
 
+def _domaine(url):
+    """Domaine enregistrable (deux derniers labels) — `lb.drpc.org` et `robinhood-testnet.drpc.org`
+    sont le même fournisseur. Ne rend JAMAIS l'URL (elle porte souvent une clé d'API)."""
+    from urllib.parse import urlparse
+    h = (urlparse(url).hostname or "").lower().rstrip(".")
+    return ".".join(h.split(".")[-2:]) if h.count(".") >= 1 else h
+
+
+def profil_rpc(url_secrete, declare):
+    """Le profil de fournisseur que le `.env` doit porter, ou ARRÊT.
+
+    Le fournisseur est IDENTIFIÉ par le domaine de l'URL secrète, confronté aux profils MESURÉS du paquet
+    scellé (`veilleur/fournisseurs.py:PROFILS` — lus, jamais recopiés). Un domaine connu IMPOSE son
+    profil : `b` est sur dRPC (101 blocs par plage, refus en HTTP 400), et sans le profil il redécouvre
+    la limite à CHAQUE passe en se faisant refuser (rapport veilleur §13). Déclarer un profil que l'URL
+    contredit est aussi un ARRÊT : ce serait les hypothèses d'un autre fournisseur. Un domaine inconnu
+    sans profil déclaré est admis (mode découverte, borné par le client) ; avec un profil déclaré, non.
+    Les messages nomment les DOMAINES des profils, jamais l'URL secrète.
+    """
+    if ICI not in sys.path:
+        sys.path.insert(0, ICI)
+    from veilleur.fournisseurs import PROFILS
+    dom = _domaine(url_secrete)
+    detectes = sorted(n for n, p in PROFILS.items() if _domaine(p["url"]) == dom)
+    if len(detectes) > 1:
+        raise PreparerError(f"ARRÊT : plusieurs profils mesurés partagent un domaine ({detectes}).")
+    if declare is not None and declare not in PROFILS:
+        raise PreparerError(f"ARRÊT : rpc_profil « {declare} » n'est pas un profil mesuré "
+                            f"({', '.join(sorted(PROFILS))}).")
+    if detectes and declare != detectes[0]:
+        raise PreparerError(
+            f"ARRÊT : l'URL RPC secrète est chez le fournisseur du profil « {detectes[0]} » "
+            f"(domaine {_domaine(PROFILS[detectes[0]]['url'])}), la configuration déclare "
+            f"« {declare or 'AUCUN profil'} ». Poser `\"rpc_profil\": \"{detectes[0]}\"` dans la configuration "
+            f"de chaîne : sans lui le client redécouvre la limite de plage en se faisant refuser.")
+    if not detectes and declare is not None:
+        raise PreparerError(
+            f"ARRÊT : la configuration déclare le profil « {declare} », mais l'URL RPC secrète n'est chez "
+            f"AUCUN fournisseur mesuré. Mesurer ce fournisseur, ou retirer `rpc_profil`.")
+    return declare
+
+
 def preparer(config_path, etat_dir, reprise="incrémental"):
     with open(config_path, encoding="utf-8") as fh:
         c = json.load(fh)
@@ -149,9 +191,11 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
     pub_path = os.path.join(etat_dir, "attest-b.pub")
 
     poser_cle(cle_path, _secret("SPINDEX_B_ATTEST_KEY_HEX"))
+    url = _secret("SPINDEX_B_RPC_URL")
+    profil = profil_rpc(url, c.get("rpc_profil"))
 
     ecrire_env(env_path, [
-        ("SPINDEX_RPC_URL", _secret("SPINDEX_B_RPC_URL")),
+        ("SPINDEX_RPC_URL", url),
         ("SPINDEX_CHAIN_ID", int(c["chain_id"])),
         ("SPINDEX_REWARDS_ADDR", c["rewards"]),
         ("SPINDEX_REWARDS_DEPLOY_BLOCK", int(c["deploy_block"])),
@@ -185,7 +229,7 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
         ("SPINDEX_MULTICALL_BATCH", int(c.get("multicall_batch") or 4000)),
         ("SPINDEX_WEEK_UNPOSTED_ALERT_DAYS", int(c.get("week_unposted_alert_days") or 7)),
         ("SPINDEX_DRAW_UNSETTLED_ALERT_DAYS", int(c.get("draw_unsettled_alert_days") or 3)),
-    ])
+    ] + ([("SPINDEX_RPC_PROFIL", profil)] if profil else []))
 
     # Le `.env` est relu par L'AUDITEUR DU PAQUET SCELLÉ, pas par moi : ce qui compte est ce que voit
     # le CONSOMMATEUR (extension de KE#107 vérifiée le 2026-09-21).

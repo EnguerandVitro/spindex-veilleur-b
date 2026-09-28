@@ -1,12 +1,12 @@
 {
  "_doc": "Lot public du veilleur SPINDEX. Données publiques uniquement : aucune clé, aucun chemin de notre infrastructure. Permet à un tiers de rejouer nos verdicts.",
- "fabriqué_le": "2026-09-21T03:10:59Z",
+ "fabriqué_le": "2026-09-24T11:28:12Z",
  "contrat": "SpindexRewards",
  "source_keccak256": {
-  "SpindexRewards": "0x9f66dc85731e681f860d9e6a6f344cf717033bbdf2907b110983e98ef22f7ab2"
+  "SpindexRewards": "0x505f40f5446e153f2e6177eba7f476df56e59df679fabae5048a9c88943e2b19"
  },
  "source_sha256": {
-  "SpindexRewards": "62288f34742aec711cb872c156d709d94037129b90828d93a93c6995ff8ee85a"
+  "SpindexRewards": "c806079ced3382f0f4d33af6536ca3fc2719181b9c94f3724d56804461ea1090"
  },
  "chaîne": {
   "chain_id": 4663,
@@ -18,8 +18,8 @@
   "_note": "`rewards` et `deploy_block` valent null tant que le contrat n'est pas déployé ; le vérificateur REFUSE alors le mode chaîne et le dit, au lieu de vérifier contre une adresse vide."
  },
  "fichiers": {
-  "SpindexRewards.abi.json": "a51058da598eb28069228d3c5c977f48e62c4b914e9f02a871ba96cc5102e1cd",
-  "SpindexRewards.sol": "62288f34742aec711cb872c156d709d94037129b90828d93a93c6995ff8ee85a",
-  "rewards_constants.json": "798823bc109886d8a3699e3b5efc1ca910acda14bddd428f4acc9eeacf336656"
+  "SpindexRewards.abi.json": "2c8ed983524f8cf298444ca2670c79d734a9de40a94ee038aa7ea4df9a0dc3e3",
+  "SpindexRewards.sol": "c806079ced3382f0f4d33af6536ca3fc2719181b9c94f3724d56804461ea1090",
+  "rewards_constants.json": "33435f434151bf63c63befcae13f5536c72e93c32ead9e0913a79fd27dd2f85c"
  }
 }

@@ -32,10 +32,10 @@ import os
 from . import artefacts as _artefacts
 from . import tables as tables_mod
 from . import verdict as verdict_mod
-from .chainabi import RewardsModel
+from .chainabi import RewardsModel, SEL_TOTAL_SUPPLY
 from .controls import run_table_seule
 from .config import verifier_besoin
-from .rpc import RpcClient
+from .rpc import client_depuis
 from .window_history import BESOIN_DEFAUT_S
 
 
@@ -75,7 +75,7 @@ class ChaineParLot:
         import tempfile
         self.state_dir = os.path.join(tempfile.gettempdir(), "spindex-veilleur-public")
         self.window_probe_to = None
-        self.window_probe_data = "0x18160ddd"
+        self.window_probe_data = SEL_TOTAL_SUPPLY
         # Reconstruction COMPLÈTE depuis le bloc de déploiement, toujours : c'est la garantie
         # « reproductible par n'importe qui ». Un tiers ne doit dépendre d'aucun cache — ni du nôtre,
         # ni d'un cache qu'il aurait lui-même laissé dans un dossier temporaire partagé.
@@ -195,5 +195,5 @@ def verifier(table, rpc_url=None, racine_artefacts=None, surcharges_chaine=None)
         return verdict_mod.sans_signature(doc, "coordonnées de chaîne absentes du lot publié.")
 
     from .service import Veilleur                    # import tardif : le mode hors ligne n'en a pas besoin
-    v = Veilleur(s, model, client=RpcClient(s.rpc_url))
+    v = Veilleur(s, model, client=client_depuis(s))
     return (v.check_opendraw if t.kind == "draw" else v.check_postweek)(t.week_id, table_source=t)

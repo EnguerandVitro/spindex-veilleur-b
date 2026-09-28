@@ -32,7 +32,7 @@ from .longfuse import RootJournal, draws_report, weeks_report
 from . import compte_a_rebours as car_mod
 from .window_history import DureeHistory, WindowHistory, mesurer_fenetre
 from .reconstruct import BlockTimestamps, replay, replay_both
-from .rpc import RpcClient, RpcUnavailable
+from .rpc import RpcUnavailable, client_depuis
 from .journaux import LecteurJournaux
 from .amorcage import AmorcageAbsent, ChaineInattendue, garde_chaine
 
@@ -55,7 +55,7 @@ class Veilleur:
     def __init__(self, settings, model, client=None):
         self.s = settings
         self.model = model
-        self.client = client or RpcClient(settings.rpc_url)
+        self.client = client or client_depuis(settings)
         self.reader = ChainReader(self.client, model, settings)
         self.journaux = LecteurJournaux(self.client, settings)
 

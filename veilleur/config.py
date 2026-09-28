@@ -18,6 +18,9 @@ import os
 import re
 import sys
 
+from .chainabi import SEL_TOTAL_SUPPLY
+from .fournisseurs import (PROFILS, PROFONDEUR_MAX_DEFAUT, SPAN_LOGS_DEFAUT, USER_AGENT_DEFAUT)
+from .rpc import RpcRefused, verifier_span, verifier_user_agent
 from .battement import PlanificationError
 from .battement import planificateur as _lire_planificateur
 from .battement import planification as _lire_planification
@@ -125,10 +128,37 @@ class Settings:
         self.window_need_s = int(env.get("SPINDEX_WINDOW_NEED_S") or BESOIN_DEFAUT_S)
         verifier_besoin(self.window_need_s, self.publish_deadline_s, self.window_alert_s)
         self.max_multicall_batch = int(env.get("SPINDEX_MULTICALL_BATCH") or 4000)
+        # ------------------------------------------------------------------ profil du FOURNISSEUR
+        # Ce qui est spécifique à un fournisseur RPC est DÉCLARÉ (veilleur/fournisseurs.py:PROFILS)
+        # et CONFIGURABLE ici, jamais figé dans le code. Mesures du 2026-09-24 sur la 46630 :
+        # le nœud officiel accepte des plages énormes mais plafonne à 10 000 journaux ; publicnode
+        # plafonne à 50 000 blocs ; dRPC à 101 blocs, avec un message qui en annonce 10 000.
+        # Un nom de profil inconnu est un ARRÊT qui NOMME les profils connus (KE#73) : un repli mou
+        # sur le défaut ferait tourner le veilleur avec les hypothèses d'un autre fournisseur.
+        self.rpc_profil = env.get("SPINDEX_RPC_PROFIL") or None
+        if self.rpc_profil is not None and self.rpc_profil not in PROFILS:
+            raise ConfigError(
+                f"ARRÊT : SPINDEX_RPC_PROFIL vaut « {self.rpc_profil} », qui n'est pas un profil "
+                f"MESURÉ. Connus : {', '.join(sorted(PROFILS))}. Un fournisseur neuf se mesure et se "
+                f"déclare dans veilleur/fournisseurs.py:PROFILS avant d'être utilisé.")
+        span_profil = PROFILS[self.rpc_profil]["span_logs_max"] if self.rpc_profil else SPAN_LOGS_DEFAUT
+        try:
+            self.rpc_max_log_span = verifier_span(env.get("SPINDEX_RPC_MAX_LOG_SPAN") or span_profil)
+            self.rpc_user_agent = verifier_user_agent(
+                env.get("SPINDEX_RPC_USER_AGENT") or USER_AGENT_DEFAUT)
+        except (RpcRefused, ValueError) as e:
+            raise ConfigError(str(e)) from e
+        # Profondeur maximale sondée par la dichotomie de fenêtre. Sur un nœud d'ARCHIVE, c'est elle
+        # qui devient le MINORANT rendu : elle doit donc rester au-dessus du besoin, sinon le
+        # minorant ne conclut rien (alerte `fenêtre_minorant_sous_besoin`).
+        self.window_max_depth = int(env.get("SPINDEX_WINDOW_MAX_DEPTH") or PROFONDEUR_MAX_DEFAUT)
+        if self.window_max_depth < 1:
+            raise ConfigError(
+                f"ARRÊT : SPINDEX_WINDOW_MAX_DEPTH vaut {self.window_max_depth}, attendu ≥ 1.")
         # Repli de sonde tant que SPINDEX n'est pas déployé : la fenêtre se mesure alors sur une
         # cible tierce de MÊME FORME, et le rapport le dit (jamais un chiffre sans sa provenance).
         self.window_probe_to = env.get("SPINDEX_WINDOW_PROBE_TO") or None
-        self.window_probe_data = env.get("SPINDEX_WINDOW_PROBE_DATA") or "0x18160ddd"
+        self.window_probe_data = env.get("SPINDEX_WINDOW_PROBE_DATA") or SEL_TOTAL_SUPPLY
         # Surveillance à mèche longue : seuils d'alerte, bien en amont des J+90 / J+30 du contrat.
         self.week_unposted_alert_days = int(env.get("SPINDEX_WEEK_UNPOSTED_ALERT_DAYS") or 7)
         self.draw_unsettled_alert_days = int(env.get("SPINDEX_DRAW_UNSETTLED_ALERT_DAYS") or 3)

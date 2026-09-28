@@ -21,26 +21,30 @@
  "format_version": 1,
  "house_edge_bps": 390,
  "inputs_sha256": {
-  "contracts/rewards/REWARDS_SPEC.md": "d36a4f81298efdbb87215ce7b6dde1964a73887e70e0b76c45e43abba65ed81a",
+  "contracts/rewards/REWARDS_SPEC.md": "5fe86c4d70f8fc95be22607b1356cbebc95862aacae505c322af389800479c89",
   "contracts/rewards/rapports/reconnaissance.md": "e0e9543e35d5ea922f871b5906961d61fdd1dad5569f269c6659e809669ebfec",
   "contracts/src/DrandQuicknetVerifier.sol": "c542c446189e045ba58ff10469975e0ac1c9756dce0cae30015b11bc9f405b22",
   "contracts/src/SpinTickets.sol": "c94649d70ceca478e7a323275619d8c27fc22cd35e1c22e1654706f10a2a99b3",
-  "contracts/src/SpindexRewards.sol": "62288f34742aec711cb872c156d709d94037129b90828d93a93c6995ff8ee85a",
-  "contracts/vault/VAULT_SPEC.md": "e3b78a3e337ff98700735300bcf3033fae3fd0663f1fc8732ef4814b1c037aa9",
-  "docs/TREASURY_POLICY.md": "81928c9093082f4b4bc3382f96ce2f2a7c82c084e99561d1f77c6c21c3b30459",
+  "contracts/src/SpindexRewards.sol": "c806079ced3382f0f4d33af6536ca3fc2719181b9c94f3724d56804461ea1090",
+  "contracts/vault/VAULT_SPEC.md": "f40a0b4f802e1584e1a39453a1bfc8643da9030e20e4b975b9aa4582d3600a7d",
+  "docs/TREASURY_POLICY.md": "be40a5886029bd8c5f87aaa833d75312e6eadfc18b0b9ec56143c5d370578e79",
   "sim/tokenomics.py": "efed972c1d45877247b6e75f1e468718d7ba5eaf0103bb7ab988c5cf1e139f96"
  },
  "launch_fdv_usd": 2000000,
  "launch_price_usdg_e6_per_spdx": 2000,
  "merkle": {
   "claim_fields": [
+   "bytes32 TAG_CLAIM",
    "address player",
    "uint256 weekId",
    "uint256 rakebackUsdg",
    "uint256 revshareUsdg"
   ],
   "claim_leaf_order": "feuilles triées par (player, weekId) avant construction",
+  "claim_tag": "keccak256(\"SPINDEX/rewards/claim/v1\") = 0xf936dd6f70fa63d52cfda3dd7e131ea2bcd6e1f4472ec258766e934a3eb98266",
+  "domain_separation_rule": "Une feuille valide dans un arbre n'est valide dans AUCUN autre arbre du système. Table canonique des étiquettes du CONTRAT : `SpindexRewards.domainTags()` — source unique, jamais recopiée. Garde de source : `contracts/script/domain_tag_gate.py`.",
   "draw_fields": [
+   "bytes32 TAG_DRAW",
    "address player",
    "uint256 weekId",
    "uint256 index",
@@ -48,9 +52,19 @@
    "uint256 cumulativeTo"
   ],
   "draw_leaf_order": "feuilles triées par index ; intervalles [from, to) pavant exactement [0, totalWeight)",
-  "leaf": "keccak256(bytes.concat(keccak256(abi.encode(...))))",
+  "draw_tag": "keccak256(\"SPINDEX/rewards/draw/v1\") = 0xb8b563b26cd2db96bb0ee8fd300d49110a865a38f8ffbec4276cb9182a6058de",
+  "leaf": "keccak256(bytes.concat(keccak256(abi.encode(TAG, ...))))",
+  "leaf_domain_tag": "PREMIER mot de CHAQUE préimage, un domaine par arbre (§12.1, lot §C-4, red team backend F03). Sans elle, la feuille de paiement `claim` et la feuille de saison de l'indexeur sont le MÊME mot : hachages mesurés identiques (0x9207f661…).",
   "node": "keccak256(a < b ? a||b : b||a)  — paires triées",
-  "odd_node": "promu tel quel, JAMAIS dupliqué"
+  "odd_node": "promu tel quel, JAMAIS dupliqué",
+  "season_fields": [
+   "bytes32 TAG_SEASON",
+   "address player",
+   "uint256 seasonId",
+   "uint256 pointsJeu",
+   "uint256 pointsParrainage"
+  ],
+  "season_tag": "keccak256(\"SPINDEX/index/season/v1\") = 0x075b2bb8b4e4822663df4214fa37b17ba8451f582ab1718ad6c533aa75585d3b — HORS CHAÎNE : aucun contrat ne la connaît, elle appartient à l'indexeur."
  },
  "pool_fee_bps": 30,
  "rakeback_envelope_bps": 1000,
@@ -207,9 +221,25 @@
    "file": "docs/TREASURY_POLICY.md",
    "quote": "ventes ACF au-delà de 2 M$ de FDV"
   },
+  "merkle_domain_tag_claim": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "bytes32 public constant TAG_CLAIM = keccak256(\"SPINDEX/rewards/claim/v1\");"
+  },
+  "merkle_domain_tag_draw": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "bytes32 public constant TAG_DRAW = keccak256(\"SPINDEX/rewards/draw/v1\");"
+  },
+  "merkle_domain_tag_table": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "return [TAG_CLAIM, TAG_DRAW];"
+  },
   "merkle_leaf_claim": {
-   "file": "contracts/rewards/rapports/reconnaissance.md",
-   "quote": "keccak256(bytes.concat(keccak256(abi.encode(player, weekId, rakebackUsdg, revshareUsdg))))"
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "bytes.concat(keccak256(abi.encode(TAG_CLAIM, msg.sender, weekId, rakebackUsdg, revshareUsdg)))"
+  },
+  "merkle_leaf_draw": {
+   "file": "contracts/src/SpindexRewards.sol",
+   "quote": "bytes.concat(keccak256(abi.encode(TAG_DRAW, player, weekId, index, cumulativeFrom, cumulativeTo)))"
   },
   "merkle_no_odd_duplication": {
    "file": "contracts/rewards/rapports/reconnaissance.md",

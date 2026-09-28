@@ -8,7 +8,10 @@ Trois sources, et elles se contrôlent l'une l'autre :
 2. la SOURCE elle-même, d'où sont extraites les constantes de boost (`BOOST_ONE`, `BOOST_RAMP`,
    `BOOST_CAP_ELAPSED`) : le veilleur doit rejouer `_boost` à l'identique, et recopier `30 days` à la
    main serait exactement la constante recopiée que la règle interdit ;
-3. `contracts/rewards/rewards_constants.json`, fichier SCELLÉ produit par l'atelier de référence.
+3. `contracts/rewards/rewards_constants.json`, fichier SCELLÉ produit par l'atelier de référence —
+   lu par `convention.py`, SEUL lecteur de la convention merkle et des étiquettes de domaine. Ce
+   module ne la recopie plus : il lui délègue, et refuse quand les deux arbres d'artefacts en
+   présence (celui qu'on lui donne, celui que le paquet résout) n'en disent pas la même chose.
 
 Les valeurs (2) et (3) sont comparées : une divergence entre la source et le fichier scellé est un
 ARRÊT, pas un avertissement. Deux artefacts indépendants qui disent la même chose valent mieux qu'un
@@ -20,6 +23,7 @@ import os
 import re
 
 from . import artefacts as _artefacts
+from . import convention as _convention
 
 from . import keccak as _keccak_pur
 
@@ -244,6 +248,13 @@ def decode_outputs(abi: ContractAbi, fn: str, raw_hex: str):
 
 SEL_AGGREGATE3 = keccak256(b"aggregate3((address,bool,bytes)[])")[:4]
 
+# Sonde de FENÊTRE D'ÉTAT : un appel `eth_call` volontairement banal, dont la seule vertu est
+# d'exister sur n'importe quel ERC-20. Le sélecteur est DÉRIVÉ, pas recopié : `0x18160ddd` était
+# écrit en dur à trois endroits (`config.py`, `public_verify.py`, `chainread.py`) avec un commentaire
+# « totalSupply() » que rien ne vérifiait — c'est la forme exacte de KE#116 (une constante d'un
+# contrat recopiée en prose), et trois copies, c'est trois occasions de diverger.
+SEL_TOTAL_SUPPLY = "0x" + keccak256(b"totalSupply()")[:4].hex()
+
 
 def encode_aggregate3(calls):
     """`aggregate3(Call3[])` encodé à la main. `calls` = [(target, allowFailure, data_bytes)]."""
@@ -374,18 +385,28 @@ class RewardsModel:
                 != self.c["BOOST_MAX"]:
             raise AbiError("ARRÊT : BOOST_ONE + BOOST_ONE × CAP / RAMP != BOOST_MAX — constantes incohérentes.")
 
-        mk = sealed.get("merkle") or {}
         # La convention merkle est SCELLÉE : si elle change, mon constructeur d'arbre devient faux.
-        want = {
-            "node": "keccak256(a < b ? a||b : b||a)  — paires triées",
-            "odd_node": "promu tel quel, JAMAIS dupliqué",
-            "leaf": "keccak256(bytes.concat(keccak256(abi.encode(...))))",
-        }
-        for k, v in want.items():
-            if mk.get(k) != v:
-                raise AbiError(
-                    f"ARRÊT : convention merkle scellée modifiée ({k}). Mon constructeur d'arbre a été écrit "
-                    f"pour « {v} » et lit « {mk.get(k)} ». Relire §9/§20 avant de continuer.")
+        # Elle n'est PLUS recopiée ici : `convention.charger()` en est le seul lecteur, et il vérifie
+        # en plus les étiquettes de domaine et la non-collision des préimages (red team F03). Recopier
+        # la convention à deux endroits, c'était en avoir deux qui peuvent diverger — et c'est
+        # exactement le défaut que ce lot corrige (KE#116 : balayer TOUS les consommateurs, pas
+        # seulement l'instance corrigée).
+        self.convention = _convention.charger(racine)
+
+        # Le module `merkle` calcule ses feuilles avec les étiquettes de l'arbre d'artefacts que le
+        # PAQUET résout par défaut ; ce modèle-ci lit l'arbre qu'on lui a DONNÉ. Tant que les deux
+        # coïncident, il n'y a qu'une convention. S'ils divergent — un `contracts/` livré périmé à
+        # côté d'un lot publié à jour, par exemple — les feuilles seraient calculées selon l'un et
+        # comparées selon l'autre, EN SILENCE. On refuse, et on nomme les deux racines.
+        par_defaut = _convention.defaut()
+        if par_defaut.empreinte() != self.convention.empreinte():
+            raise AbiError(
+                "ARRÊT : deux conventions merkle en présence et elles diffèrent.\n"
+                f"  artefacts donnés  : {self.convention.chemin}  ({self.convention.empreinte()[:16]}…)\n"
+                f"  artefacts du paquet : {par_defaut.chemin}  ({par_defaut.empreinte()[:16]}…)\n"
+                "Les feuilles seraient calculées selon l'une et comparées selon l'autre. Refaire le "
+                "lot publié (`python3 -B -m veilleur.outils.faire_lot_public`) ou corriger la racine "
+                "donnée.")
 
     # ---------------- formules du contrat, rejouées à l'identique
 
