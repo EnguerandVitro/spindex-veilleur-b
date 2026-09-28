@@ -2,8 +2,8 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1790619191,
- "empreinte": "cd1efb7a327ecb6ef8a026ff2cf5850ece505f4ad9d542c1b89f2e42275d9338",
+ "ts": 1790625193,
+ "empreinte": "6993f76806d3628257afe933ace1ef6c84fbb375e521fe9a7af5e5053236035a",
  "planificateur": "github-actions",
  "cadence_blocs_s": {
   "valeur": 9.98,
@@ -20,7 +20,7 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_PASSE_S / SPINDEX_VEILLEUR_PRECISION_PASSE_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_PASSE_S dans le .env de l'instance",
    "pire_exécution_s": 121.0,
-   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 24.068 s sur 32 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 10.702 s sur 1 exécution(s))",
    "silence_max_s": 1081,
    "retard_bloc_max": 11996,
    "formules": {
@@ -55,8 +55,8 @@
    "précision_s": null,
    "délai_aléatoire_s": null,
    "période_provenance": "DÉCLARÉE par l'instance — SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S=non-planifiée (déclarée non planifiée sur cette instance)",
-   "pire_exécution_s": null,
-   "pire_exécution_source": "NON DÉRIVABLE : ni borne théorique (âge du contrat inconnu) ni durée observée",
+   "pire_exécution_s": 242.5,
+   "pire_exécution_source": "borne théorique (théorique 242.5 s = 128 appels × 1.89 s ; observé max None s sur 0 exécution(s))",
    "silence_max_s": null,
    "retard_bloc_max": null,
    "formules": {
