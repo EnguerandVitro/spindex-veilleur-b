@@ -1,7 +1,7 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 126100455,
+  "bloc": 126103409,
   "code": null,
   "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.62 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "e357d89a68791e65092915a89e02200d6c4a07e8e252fa53023a3c50f4f5081f",
@@ -11,24 +11,24 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 47,
+  "passe": 48,
   "resultat": "ok",
   "rpc": {
-   "appels": 243,
+   "appels": 249,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790669371
+  "ts": 1790669854
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 46,
+ "compteur_precedent": 47,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-29T08:09:31Z",
- "juge_le_ts": 1790669371,
+ "juge_le": "2026-09-29T08:17:34Z",
+ "juge_le_ts": 1790669854,
  "motifs": [],
  "remarques": [
   "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.62 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
