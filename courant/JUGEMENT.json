@@ -1,9 +1,9 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 126075853,
-  "code": "alerte_P1",
-  "detail": "P1 : fenêtre_en_recul",
+  "bloc": 126082758,
+  "code": null,
+  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.59 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "e357d89a68791e65092915a89e02200d6c4a07e8e252fa53023a3c50f4f5081f",
   "format": 1,
   "fournisseurs": {
@@ -11,31 +11,28 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 39,
-  "resultat": "refus",
+  "passe": 40,
+  "resultat": "ok",
   "rpc": {
-   "appels": 399,
+   "appels": 356,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1790665356
+  "ts": 1790666288
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 38,
+ "compteur_precedent": 39,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-09-29T07:02:36Z",
- "juge_le_ts": 1790665356,
- "motifs": [
-  {
-   "cle": "controle_rouge",
-   "texte": "contrôle ROUGE (code « alerte_P1 ») : la tâche a fait son travail et a trouvé une alerte. P1 : fenêtre_en_recul"
-  }
+ "juge_le": "2026-09-29T07:18:09Z",
+ "juge_le_ts": 1790666289,
+ "motifs": [],
+ "remarques": [
+  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 0.59 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
- "remarques": [],
  "tache": "passe",
- "verdict": "ROUGE"
+ "verdict": "VERT"
 }
