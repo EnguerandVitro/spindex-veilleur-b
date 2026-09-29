@@ -188,6 +188,15 @@ def amorcer(v, s, tx_hash, echeance=None, horloge=time.time):
     rep["preuves"]["D_différentiel_complet"] = {
         "état": d["état"], "journaux": (d.get("couverture_estimation") or {}).get("journaux_couverts"), "couverture": cv,
         "invalidations": d.get("invalidations"), "ok": d["état"] == "IDENTIQUE"}
+    # Une FINALITÉ VIOLÉE constatée (chaîne rejouée à la même identité, KE#132) interdit tout registre : l'ancre de
+    # chaîne ne se valide pas sur une chaîne dont un bloc finalisé a changé (revue 2026-09-29, P1).
+    from .segments import preuves_en_attente
+    # les DEUX portées : une preuve seule dans l'état quotidien (état complet rejeté, KE#132) interdit aussi le registre
+    viol = list(d.get("finalités_violées") or []) + preuves_en_attente(s.state_dir) + \
+        [i for i in (d.get("invalidations") or []) if i.get("finalité_violée")]
+    if viol:
+        motifs.append(f"D : FINALITÉ VIOLÉE — {str(viol[0].get('motif'))[:200]} (empreinte "
+                      f"{viol[0].get('empreinte', '—')}) : aucun registre")
     en_cours = False
     if d["état"] == "PARTIEL" and not motifs:
         en_cours = True                  # budget atteint (ou cache en retard) : ce n'est pas un refus

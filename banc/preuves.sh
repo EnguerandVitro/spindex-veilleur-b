@@ -552,7 +552,7 @@ done
 code=0
 PATH="$K3/shim:$PATH" B_ETAT="$K3" B_LOT="$K3/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" \
 SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$K3.log" 2>&1 || code=$?
-ep=0; bash "$RACINE/outils/etat_partiel.sh" "$K3" "$K3/pub" > "$K3.ep.log" 2>&1 || ep=$?
+ep=0; bash "$RACINE/outils/etat_partiel.sh" "$K3" "$K3/pub" differentiel-quotidien > "$K3.ep.log" 2>&1 || ep=$?
 if [ -f "$K3/CACHE_CONTREDIT" ] && [ -d "$K3/etat/journaux" ] && [ "$ep" = 1 ] && [ ! -d "$K3/pub/etat/journaux" ] \
    && grep -q "IMPOSSIBLE à écarter" "$K3.log" && ! grep -q "SUPPRIMÉ" "$K3.log"; then
   echo "  [cache_contredit] OK — cache contredit non écartable : CACHE_CONTREDIT posé, publication de etat/ REFUSÉE (1)"; VERTS=$((VERTS + 1))
@@ -560,6 +560,121 @@ else
   echo "  [cache_contredit] ÉCHEC — cache contredit non écartable mal traité (code $code, etat_partiel $ep, voir $K3.log)"
   ECHECS+=("cache_contredit: non écartable"); ROUGES=$((ROUGES + 1))
 fi
+# K3b — MÊME situation, et le marqueur lui-même ne peut pas être écrit (touch refusé) : la PREUVE LOCALE (battement
+# DIVERGENT de cette exécution + etat/journaux présent) refuse seule — jamais un échec ouvert (KE#104)
+K3B="$TRAVAIL/cache_contredit_sans_marqueur"; rm -rf "$K3B" && mkdir -p "$K3B/shim"
+cp -r "$TRAVAIL/k3-source" "$K3B/etat"; cp "$K3/shim/mv" "$K3/shim/rm" "$K3B/shim/"
+printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */CACHE_CONTREDIT) echo "shim : touch refusé" >&2; exit 1;; esac; done\nexec %s "$@"\n' \
+  "$(command -v touch)" > "$K3B/shim/touch"; chmod +x "$K3B/shim/touch"
+mkdir -p "$K3B/pub/etat" && cp "$TRAVAIL/k3-source/battement-differentiel-quotidien.json" "$K3B/pub/etat/" 2>/dev/null
+PATH="$K3B/shim:$PATH" B_ETAT="$K3B" B_LOT="$K3B/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" \
+SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$K3B.log" 2>&1
+g=0; bash "$RACINE/outils/publier_etat.sh" copier "$K3B" "$K3B/pub" differentiel-quotidien > "$K3B.pub.log" 2>&1 || g=$?
+if [ ! -f "$K3B/CACHE_CONTREDIT" ] && [ -d "$K3B/etat/journaux" ] && [ "$g" = 1 ] && [ ! -d "$K3B/pub/etat/journaux" ] \
+   && grep -q "preuve locale" "$K3B.pub.log"; then
+  echo "  [cache_contredit] OK — marqueur NON écrit : la preuve locale refuse seule la publication (KE#104)"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — sans marqueur, publication de etat/ non refusée (garde $g, voir $K3B.pub.log)"
+  ECHECS+=("cache_contredit: preuve locale"); ROUGES=$((ROUGES + 1))
+fi
+# K3e/K3f/K3g — la preuve locale, jambe par jambe, SANS marqueur, sur des états fabriqués (état sain + fichiers) :
+#   K3e : rapport DIVERGENT mais battement codé `differentiel_finalite_violee` (la finalité prime) ⇒ refus (ÉTAT lu)
+#   K3f : battement DIVERGENT d'HIER restauré à l'identique du publié ⇒ PUBLIÉ (jamais un refus éternel)
+#   K3g : ARRET.json de l'amorçage, preuve D DIVERGENTE ⇒ refus
+#   K3h : rapport DIVERGENT d'HIER (antérieur au DEBUT écrit), tâche en panne ce coup-ci ⇒ PUBLIÉ (pas de faux refus)
+#   K3i : même chose, rapport postérieur au DEBUT ⇒ refus
+#   K3l : rapport FRAIS DIVERGENT, battement NON avancé (tué entre les deux), pas de marqueur ⇒ refus
+for cas in K3e K3f K3g K3h K3i K3l; do
+  D="$TRAVAIL/cache_$cas"; rm -rf "$D" && mkdir -p "$D/pub/etat"; cp -r "$TRAVAIL/reference/etat" "$D/etat"
+  python3 -B - "$D" "$cas" <<'PYEOF'
+import json, os, sys
+d, cas = sys.argv[1], sys.argv[2]
+b = {"format": 1, "service": "veilleur", "instance": "b", "tache": "differentiel-quotidien", "ts": 1, "passe": 5,
+     "bloc": 1, "resultat": "refus", "code": "differentiel_divergent", "detail": "banc"}
+if cas == "K3e":
+    b.update({"passe": 6, "code": "differentiel_finalite_violee"})
+    json.dump({"état": "DIVERGENT"}, open(os.path.join(d, "etat", "derniere-differentiel-quotidien.json"), "w"))
+    json.dump(dict(b, passe=5), open(os.path.join(d, "pub", "etat", "battement-differentiel-quotidien.json"), "w"))
+elif cas == "K3f":
+    json.dump({"état": "DIVERGENT"}, open(os.path.join(d, "etat", "derniere-differentiel-quotidien.json"), "w"))
+    json.dump(b, open(os.path.join(d, "pub", "etat", "battement-differentiel-quotidien.json"), "w"))
+elif cas == "K3l":
+    # « Veiller » tué entre le rapport et le battement : rapport FRAIS DIVERGENT, battement NON avancé, pas de marqueur
+    json.dump({"état": "DIVERGENT"}, open(os.path.join(d, "etat", "derniere-differentiel-quotidien.json"), "w"))
+    json.dump(b, open(os.path.join(d, "pub", "etat", "battement-differentiel-quotidien.json"), "w"))
+    import time
+    open(os.path.join(d, "DEBUT"), "w").write(str(time.time() - 10))
+elif cas in ("K3h", "K3i"):
+    # rapport DIVERGENT puis exécution de cette tâche en PANNE (`rpc_error`, compteur avancé) : le rapport n'est
+    # d'ICI que s'il est postérieur au DEBUT écrit (K3i) ; d'hier (K3h) il ne prouve rien ⇒ publié
+    json.dump({"état": "DIVERGENT"}, open(os.path.join(d, "etat", "derniere-differentiel-quotidien.json"), "w"))
+    b.update({"passe": 6, "resultat": "erreur", "code": "rpc_error"})
+    json.dump(dict(b, passe=5), open(os.path.join(d, "pub", "etat", "battement-differentiel-quotidien.json"), "w"))
+    import time
+    maintenant = int(time.time())
+    open(os.path.join(d, "DEBUT"), "w").write(str(maintenant + 10 if cas == "K3h" else maintenant - 10))
+else:
+    json.dump({"étape": "amorçage", "code": 2, "différentiel_D": "DIVERGENT", "journaux_figés_jusqu_à": "1"},
+              open(os.path.join(d, "ARRET.json"), "w"), ensure_ascii=False)
+    b = None
+if b is not None:
+    json.dump(b, open(os.path.join(d, "etat", "battement-differentiel-quotidien.json"), "w"))
+PYEOF
+  g=0; bash "$RACINE/outils/publier_etat.sh" copier "$D" "$D/pub" differentiel-quotidien > "$D.log" 2>&1 || g=$?
+  if { [ "$cas" != K3f ] && [ "$cas" != K3h ] && [ "$g" = 1 ] && grep -q "preuve locale" "$D.log" && [ ! -d "$D/pub/etat/journaux" ]; } \
+     || { { [ "$cas" = K3f ] || [ "$cas" = K3h ]; } && [ "$g" = 0 ] && [ -f "$D/pub/etat/journaux/curseur.json" ]; }; then
+    echo "  [cache_contredit] OK — $cas : garde $g comme attendu"; VERTS=$((VERTS + 1))
+  else
+    echo "  [cache_contredit] ÉCHEC — $cas : garde $g (voir $D.log)"; ECHECS+=("cache_contredit: $cas"); ROUGES=$((ROUGES + 1))
+  fi
+done
+# K3j (KE#164) — restauration RÉELLE de etat/ (cp -r) et executer.sh lancé dans la MÊME seconde, tâche en panne
+# (chaîne inattendue) : le rapport DIVERGENT d'hier, restauré, ne doit PAS passer pour frais ⇒ etat/ PUBLIÉ
+D="$TRAVAIL/cache_K3j"; rm -rf "$D" "$D.src" && mkdir -p "$D/pub/etat" && cp -r "$TRAVAIL/reference/etat" "$D.src"
+python3 -B - "$D.src" "$D/pub/etat" <<'PYEOF'
+import json, os, sys
+src, pub = sys.argv[1], sys.argv[2]
+b = {"format": 1, "service": "veilleur", "instance": "b", "tache": "differentiel-quotidien", "ts": 1, "passe": 5,
+     "bloc": 1, "resultat": "refus", "code": "differentiel_divergent", "detail": "banc"}
+json.dump({"état": "DIVERGENT"}, open(os.path.join(src, "derniere-differentiel-quotidien.json"), "w"))
+json.dump(b, open(os.path.join(src, "battement-differentiel-quotidien.json"), "w"))
+json.dump(b, open(os.path.join(pub, "battement-differentiel-quotidien.json"), "w"))
+PYEOF
+python3 -B -c 'import time; time.sleep(1.02 - time.time() % 1)'     # début d une seconde : cp et DEBUT dans la même
+cp -r "$D.src" "$D/etat"
+B_ETAT="$D" B_LOT="$D/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" SPINDEX_B_RPC_URL="$RPC_AUTRE" \
+SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$D.exec.log" 2>&1
+g=0; bash "$RACINE/outils/publier_etat.sh" copier "$D" "$D/pub" differentiel-quotidien > "$D.log" 2>&1 || g=$?
+if [ "$g" = 0 ] && [ -f "$D/pub/etat/journaux/curseur.json" ] && python3 -B -c 'import json,sys
+b=json.load(open(sys.argv[1]));sys.exit(0 if b["passe"]==6 and b["code"]=="chaine_inattendue" else 1)' "$D/etat/battement-differentiel-quotidien.json"; then
+  echo "  [cache_contredit] OK — K3j : restauration et DEBUT dans la même seconde, rapport d hier NON frais ⇒ publié"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — K3j : garde $g (voir $D.log, $D.exec.log)"; ECHECS+=("cache_contredit: K3j"); ROUGES=$((ROUGES + 1))
+fi
+# K3k — restauration APRÈS le DEBUT (un fichier de etat/ plus récent que le début) : executer.sh s'ARRÊTE, nommé
+D="$TRAVAIL/cache_K3k"; rm -rf "$D" && mkdir -p "$D" && cp -r "$TRAVAIL/reference/etat" "$D/etat"
+touch -d "@$(( $(date +%s) + 30 ))" "$D/etat/amorcage.json"
+code=0
+B_ETAT="$D" B_LOT="$D/lot" B_TACHE=passe B_CONFIG="$CONFIG_BANC" SPINDEX_B_RPC_URL="$RPC_VRAI" \
+SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$D.log" 2>&1 || code=$?
+if [ "$code" = 2 ] && grep -q "APRÈS le DEBUT" "$D.log"; then
+  echo "  [cache_contredit] OK — K3k : restauration postérieure au DEBUT ⇒ ARRÊT (2) nommé"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — K3k : code $code (voir $D.log)"; ECHECS+=("cache_contredit: K3k"); ROUGES=$((ROUGES + 1))
+fi
+# K3c — le marqueur SEUL (état sain, aucune preuve locale) suffit à refuser ; K3d — témoin positif : état sain, pas de
+# marqueur ⇒ publié, cache compris (sans lui, une garde qui refuse TOUT passerait les jambes ci-dessus)
+for cas in K3c K3d; do
+  D="$TRAVAIL/cache_$cas"; rm -rf "$D" && mkdir -p "$D/pub"; cp -r "$TRAVAIL/reference/etat" "$D/etat"
+  [ "$cas" = K3c ] && touch "$D/CACHE_CONTREDIT"
+  g=0; bash "$RACINE/outils/publier_etat.sh" copier "$D" "$D/pub" passe > "$D.log" 2>&1 || g=$?
+  if { [ "$cas" = K3c ] && [ "$g" = 1 ] && [ ! -d "$D/pub/etat" -o ! -d "$D/pub/etat/journaux" ] && grep -q "marqueur" "$D.log"; } \
+     || { [ "$cas" = K3d ] && [ "$g" = 0 ] && [ -f "$D/pub/etat/journaux/curseur.json" ]; }; then
+    echo "  [cache_contredit] OK — $cas : garde $g comme attendu"; VERTS=$((VERTS + 1))
+  else
+    echo "  [cache_contredit] ÉCHEC — $cas : garde $g (voir $D.log)"; ECHECS+=("cache_contredit: $cas"); ROUGES=$((ROUGES + 1))
+  fi
+done
 fi
 
 if voulue fuite; then

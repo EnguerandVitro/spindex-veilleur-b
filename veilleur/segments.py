@@ -103,6 +103,96 @@ def _neuf(identite, taille, portee, maintenant):
             "points": [], "historique": [], "durée_max_segment_s": None, "partiel_depuis_ts": None}
 
 
+CLE_PREUVES = "finalités_violées_non_rapportées"      # nom historique : « non ACQUITTÉES par un humain »
+
+
+IDENTITE_PREUVE = ("bloc", "hash_vérifié", "hash_lu")
+
+
+def empreinte_preuve(preuve):
+    """sha256 de l'IDENTITÉ de la preuve — les FAITS seuls (bloc, hash vérifié, hash lu), jamais l'horodatage de
+    détection ni un contexte variable : sinon une même violation, revue à chaque exécution, serait re-consignée
+    sous une empreinte neuve (revue 2026-09-29 : 5 → 10 → 15 preuves pour 5 faits). C'est ce qu'un humain cite."""
+    import hashlib
+    corps = {k: (str(preuve.get(k)).lower() if k != "bloc" else preuve.get(k)) for k in IDENTITE_PREUVE}
+    return hashlib.sha256(json.dumps(corps, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+def _empreinte_ancienne(preuve):
+    """Formule de la passe PRÉCÉDENTE (livrée en `a`) : toute la preuve sauf `empreinte`, horodatage compris."""
+    import hashlib
+    corps = {k: v for k, v in preuve.items() if k != "empreinte"}
+    return hashlib.sha256(json.dumps(corps, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+def migrer_preuves(preuves):
+    """Preuves au format d'une version précédente ⇒ empreinte des FAITS (revue 2026-09-29, P2) : sans champ
+    `empreinte`, ou avec l'empreinte de l'ancienne formule (horodatage compris) qu'elle REPRODUIT. Une empreinte que
+    ni l'une ni l'autre formule ne reproduit n'est PAS migrée : c'est une preuve ALTÉRÉE, et elle le reste."""
+    out = []
+    for e in preuves or []:
+        e = dict(e)
+        if e.get("empreinte") != empreinte_preuve(e):
+            if "empreinte" not in e:
+                e["empreinte"] = empreinte_preuve(e)
+            elif e["empreinte"] == _empreinte_ancienne(e):
+                e["empreinte_ancienne"] = e["empreinte"]
+                e["empreinte"] = empreinte_preuve(e)
+        out.append(e)
+    return out
+
+
+def _garder_preuves(ancien, neuf):
+    """Un état REJETÉ (autre taille, identité…) ne fait JAMAIS disparaître une preuve de finalité (KE#160)."""
+    if isinstance(ancien, dict) and ancien.get(CLE_PREUVES):
+        neuf[CLE_PREUVES] = migrer_preuves(ancien[CLE_PREUVES])
+    return neuf
+
+
+def preuves_archivees(state_dir):
+    """Empreintes déjà acquittées par un humain (`preuves-acquittees/<empreinte>.json`)."""
+    d = os.path.join(state_dir, "preuves-acquittees")
+    try:
+        return {f[:-5] for f in os.listdir(d) if f.endswith(".json")}
+    except OSError:
+        return set()
+
+
+def preuves_en_attente(state_dir):
+    """Preuves NON acquittées des DEUX portées, lues sans RPC ni verrou (écritures atomiques) : ce que le chemin
+    d'exception d'une tâche et l'amorçage consultent (revue 2026-09-29, P0-1 / P1-2)."""
+    out = []
+    for portee in PORTEES:
+        try:
+            with open(chemin_etat(state_dir, portee), "r", encoding="utf-8") as fh:
+                out += migrer_preuves(json.load(fh).get(CLE_PREUVES))
+        except (OSError, ValueError):
+            pass
+    return out
+
+
+def _consigner_violation(doc, rapport, p, h, portee, maintenant, motif=None, state_dir=None):
+    """La PREUVE est inscrite dans l'état, dans la MÊME écriture que la correction (KE#160), et n'est JAMAIS acquittée
+    automatiquement (décision du coordinateur, 2026-09-29) : tant qu'elle est là, CHAQUE exécution re-publie
+    `refus/differentiel_finalite_violee`. Seul un humain l'acquitte, par son EMPREINTE exacte :
+    `python3 -B -m veilleur acquitter-finalite --preuve <empreinte>` (archivée, jamais effacée)."""
+    motif = motif or f"le hash du bloc {p['à']} lu chez le fournisseur de référence ({h}) ≠ {p['hash_fin']}"
+    preuve = {"bloc": p["à"], "hash_vérifié": (p["hash_fin"] or "").lower(), "hash_lu": (h or "").lower(),
+              "ts": int(maintenant), "portée": portee, "motif": motif}
+    preuve["empreinte"] = emp = empreinte_preuve(preuve)
+    connue = next((e for e in doc.get(CLE_PREUVES) or [] if e.get("empreinte") == emp), None)
+    if connue is not None:
+        connue["vue_n"] = connue.get("vue_n", 1) + 1           # hors identité : ne change pas l'empreinte
+        connue["dernière_vue_ts"] = int(maintenant)
+    elif state_dir is None or emp not in preuves_archivees(state_dir):
+        doc.setdefault(CLE_PREUVES, []).append(preuve)
+    if rapport is not None:
+        rapport["invalidations"].append({"contrôle": "hash_de_borne (point au contenu changé)", "motif": motif,
+                                         "points_invalidés": 1, "depuis_bloc": p["de"], "finalité_violée": True})
+
+
 def charger_etat(path, identite, taille, portee, maintenant):
     """Rend (état, motif de rejet | None). Un état d'une autre identité, d'une autre taille ou illisible n'est
     JAMAIS réutilisé — et le rejet est NOMMÉ dans le rapport, jamais un « repris depuis zéro » muet."""
@@ -116,9 +206,11 @@ def charger_etat(path, identite, taille, portee, maintenant):
     ident = {k: doc.get(k) for k in identite}
     if doc.get("format") != FORMAT or ident != identite or doc.get("taille") != taille \
             or doc.get("portée") != portee:
-        return _neuf(identite, taille, portee, maintenant), (
+        return _garder_preuves(doc, _neuf(identite, taille, portee, maintenant)), (
             f"état d'une autre identité, taille ou portée ({ident}, taille {doc.get('taille')}, portée "
             f"{doc.get('portée')} ≠ {identite}, {taille}, {portee}) : jamais réutilisé, repris depuis zéro")
+    if doc.get(CLE_PREUVES):
+        doc[CLE_PREUVES] = migrer_preuves(doc[CLE_PREUVES])
     return doc, None
 
 
@@ -252,6 +344,15 @@ def _verifier(client, settings, portee, path, ident, dep, cible, verifiable, fig
         if motif:
             rapport["invalidations"].append({"contrôle": "contenu", "motif": motif,
                                              "points_invalidés": len(points) - i, "depuis_bloc": p["de"]})
+            # Un contenu changé peut CACHER une finalité violée (cache re-figé sur une chaîne rejouée : blockHash
+            # neufs) : la borne de CHAQUE point retiré est confrontée à la référence AVANT de le retirer — sinon (ii)
+            # ne voit plus que les points antérieurs, intacts, et la violation passe pour un simple cache changé.
+            for q in points[i:]:
+                if q["à"] > cible:
+                    continue
+                hq = fin_hash if q["à"] == fin_bn else client.block(q["à"])["hash"]
+                if (hq or "").lower() != (q["hash_fin"] or "").lower():
+                    _consigner_violation(doc, rapport, q, hq, portee, maintenant, state_dir=settings.state_dir)
             del points[i:]
             break
 
@@ -274,12 +375,7 @@ def _verifier(client, settings, portee, path, ident, dep, cible, verifiable, fig
         rapport["invalidations"].append({"contrôle": "hash_de_borne", "motif": motif, "points_invalidés": 1,
                                          "depuis_bloc": p["de"], "finalité_violée": viole})
         if viole:
-            # La PREUVE est inscrite dans la MÊME écriture que la correction : si l'exécution meurt avant son
-            # rapport, la suivante la rapporte encore (contre-revue P1-A). Effacée seulement par un rapport qui la
-            # porte (bilan ou DIVERGENT).
-            doc.setdefault("finalités_violées_non_rapportées", []).append(
-                {"bloc": p["à"], "hash_vérifié": p["hash_fin"], "hash_lu": h, "ts": int(maintenant),
-                 "motif": motif})
+            _consigner_violation(doc, None, p, h, portee, maintenant, motif, state_dir=settings.state_dir)
         points.pop()
     rapport["finalités_violées"] = list(doc.get("finalités_violées_non_rapportées") or [])
     if rapport["invalidations"] or rejet or rapport["adoptés"] or rapport.get("nouveau_tour") \
@@ -344,7 +440,6 @@ def _verifier(client, settings, portee, path, ident, dep, cible, verifiable, fig
                     f"et la RÉFÉRENCE rend exactement le cache sur les {len({k[0] for k in ecarts})} bloc(s) en "
                     f"désaccord : fournisseur des journaux incohérent, cache NON contredit. Segment non inscrit.")
             doc["contredit"] = {"de": frontiere, "à": a, "ts": int(horloge()), "arbitrage": arbitre}
-            doc.pop("finalités_violées_non_rapportées", None)       # rapportées par CE rapport
             _historiser(doc, horloge(), cible, points, len(faits), "DIVERGENT")
             _ecrire_atomique(path, doc)        # SANS le segment contredit (KE#151)
             rapport.update({
@@ -415,7 +510,6 @@ def _verifier(client, settings, portee, path, ident, dep, cible, verifiable, fig
         if etat == "IDENTIQUE" and portee == "complète" and doc["tour"]["terminé_ts"] is None:
             doc["tour"]["terminé_ts"] = int(maintenant)
     _historiser(doc, maintenant, cible, points, len(faits), etat)
-    doc.pop("finalités_violées_non_rapportées", None)               # rapportées par CE rapport
     _ecrire_atomique(path, doc)
     rapport.update({"état": etat, "code": code, "motif": motif, "tour": dict(doc["tour"]),
                     "segments_cette_exécution": faits,
@@ -543,6 +637,8 @@ def _adopter(points, state_dir, ident, taille, dep, maintenant):
     frontiere = points[-1]["à"] + 1 if points else dep
     if points and points[-1]["à"] != _fin_de_grille(dep, taille, points[-1]["de"]):
         return 0                                 # notre dernier point est partiel : pas de raccord propre
+    # (Pas de garde « ne pas adopter un point vicié » : l'empreinte des FAITS dédoublonne et l'archive empêche une
+    # preuve acquittée de revenir — une seconde garde serait indémontrable, KE#139.)
     n = 0
     for p in autre["points"]:
         if p["de"] == frontiere:
@@ -593,3 +689,65 @@ def _arbitrer(client, settings, ident, ca, ecarts):
         if ref != cache_bloc:
             return "chaîne"
     return "cache"
+
+
+def acquitter_finalite(state_dir, empreinte, par):
+    """Acquittement HUMAIN d'une preuve de finalité violée, par son EMPREINTE exacte (64 hexa). La même preuve peut vivre
+    dans les DEUX portées (la quotidienne adopte les points de la complète) : TOUTES sont balayées (contre-revue,
+    P1-A). Introuvable partout ⇒ `SegmentsError`, rien touché. Trouvée : ARCHIVÉE une fois dans
+    `<état>/preuves-acquittees/<empreinte>.json` (qui, quand) et journalisée (`journal.jsonl`), PUIS retirée de chaque
+    état qui la porte — jamais effacée sans trace. Rend l'archive, avec la liste des portées nettoyées."""
+    import re
+    if not re.fullmatch(r"[0-9a-f]{64}", empreinte or ""):
+        raise SegmentsError(f"ARRÊT : empreinte « {empreinte} » : 64 caractères hexadécimaux attendus (la preuve se "
+                            f"cite EXACTEMENT, jamais par préfixe).")
+    dossier = os.path.join(state_dir, "preuves-acquittees")
+    cible_arch = os.path.join(dossier, f"{empreinte}.json")
+    archive = None
+    reprise = os.path.exists(cible_arch)      # mort entre l'archive et le retrait : le « quand » d'origine reste
+    nettoyees = []
+    for portee in PORTEES:
+        path = chemin_etat(state_dir, portee)
+        if not os.path.exists(path):
+            continue
+        verrou = open(path + ".verrou", "a+")
+        try:
+            try:
+                fcntl.flock(verrou.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                raise SegmentsError(f"ARRÊT : un différentiel « {portee} » tient le verrou de {path} : réessayer "
+                                    f"quand il est fini (rien de plus n'est touché).") from None
+            with open(path, "r", encoding="utf-8") as fh:
+                doc = json.load(fh)
+            preuves = migrer_preuves(doc.get(CLE_PREUVES))
+            if any(e.get("empreinte") == empreinte and empreinte_preuve(e) != empreinte for e in preuves):
+                raise SegmentsError(f"ARRÊT : une preuve porte l'empreinte {empreinte} mais ses FAITS ne la "
+                                    f"produisent pas : preuve ALTÉRÉE, rien n'est acquitté (examiner {path}).")
+            trouvees = [e for e in preuves if e.get("empreinte") == empreinte and empreinte_preuve(e) == empreinte]
+            if not trouvees:
+                continue
+            if archive is None:
+                archive = {"preuve": trouvees[0], "acquittée_par": par,
+                           "acquittée_le": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+                os.makedirs(dossier, exist_ok=True)
+                if not reprise:
+                    _ecrire_atomique(cible_arch, archive)      # archive D'ABORD
+            reste = [e for e in preuves if e.get("empreinte") != empreinte]
+            if reste:
+                doc[CLE_PREUVES] = reste
+            else:
+                doc.pop(CLE_PREUVES, None)
+            _ecrire_atomique(path, doc)                                                 # retirée ENSUITE
+            nettoyees.append(portee)
+        finally:
+            fcntl.flock(verrou.fileno(), fcntl.LOCK_UN)
+            verrou.close()
+    if archive is None:
+        raise SegmentsError(f"ARRÊT : aucune preuve de finalité violée d'empreinte {empreinte} dans {state_dir} : "
+                            f"rien n'est acquitté (vérifier `finalités_violées` dans derniere-differentiel-*.json).")
+    archive = dict(archive, portées=nettoyees)
+    with open(os.path.join(dossier, "journal.jsonl"), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(dict(archive, reprise=reprise), ensure_ascii=False, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    return archive

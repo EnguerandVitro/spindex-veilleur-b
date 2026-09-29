@@ -95,6 +95,11 @@ class RpcRefused(RuntimeError):
     """Le client a refusé d'émettre : méthode hors lecture seule."""
 
 
+# Délai minimal de CHAQUE opération socket d'un appel émis sous échéance dure (`_borne` : ce n'est pas un plafond de
+# durée totale, `urllib` n'en connaît pas).
+PLANCHER_DELAI_APPEL_S = 1.0
+
+
 class EcheanceDepassee(RuntimeError):
     """L'échéance DURE d'une lecture par tranches est passée : la lecture est ABANDONNÉE entre deux tranches, et
     l'appelant n'en tire aucune conclusion (le segment en vol n'est pas inscrit). Pas une panne du fournisseur."""
@@ -273,14 +278,22 @@ class RpcClient:
             autre._echeance_dure = t
 
     def _borne(self, timeout, attente=0.0):
-        """Délai du prochain appel sous l'échéance dure ; lève `EcheanceDepassee` si elle est (ou serait) franchie."""
+        """Délai du prochain appel sous l'échéance dure ; lève `EcheanceDepassee` si elle est (ou serait) franchie.
+
+        Ce que ce délai GARANTIT, et ce qu'il ne garantit pas. `urllib` applique `timeout` à CHAQUE opération de
+        socket (connexion, chaque lecture), pas à la durée totale de l'appel : une réponse livrée goutte à goutte, ou
+        une résolution DNS lente, peut dépasser l'échéance dure de plus que `PLANCHER_DELAI_APPEL_S`. Garanti : aucun
+        appel n'est ÉMIS et aucune attente de relance n'est COMMENCÉE au-delà de l'échéance dure (refus avant de
+        dormir) ; chaque opération socket d'un appel émis attend au plus max(1 s, ce qui reste). Le dépassement
+        total n'est borné que par la MARGE du job : pour `b`, échéance dure 1 740 + 120 = 1 860 s, kill à 2 160 s,
+        300 s réservées au jugement, au lot et à sa revérification (`outils/preparer.py`)."""
         e = self._echeance_dure
         if e is None:
             return timeout
         reste = e - time.time() - attente
         if reste <= 0:
             raise EcheanceDepassee(f"échéance dure atteinte ({round(-reste, 1)} s au-delà) : appel non émis")
-        return max(1.0, min(timeout or self.timeout, reste))
+        return max(PLANCHER_DELAI_APPEL_S, min(timeout or self.timeout, reste))
 
     def _with_backoff(self, payload, timeout=None):
         """429 : ATTENTE (Retry-After, sinon exponentielle bornée), comptée. Transport / 502-504 : relances.

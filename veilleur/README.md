@@ -193,7 +193,11 @@ python3 -B -m veilleur surveiller --depuis-zéro                             # r
   `couverture_estimation`. Un désaccord cache ↔ relecture est relu une fois
   en entier (KE#133/#156) puis ARBITRÉ par le fournisseur de référence sur les seuls blocs en désaccord : s'il
   rend le cache, c'est le fournisseur des journaux qui est incohérent (arrêt nommé, cache NON contredit).
-  `--nouveau-tour` (à la main) force un tour neuf. `health.json` publie `budget_s` et, pour
+  `--nouveau-tour` (à la main) force un tour neuf.
+  **Finalité violée : jamais acquittée automatiquement** (décision du 2026-09-29). La preuve reste dans l'état et
+  chaque exécution re-publie `refus/differentiel_finalite_violee` jusqu'à `python3 -B -m veilleur
+  acquitter-finalite --preuve <empreinte exacte>` (archivée et journalisée, jamais effacée) ; un amorçage qui la
+  constate n'écrit pas son registre. Procédure : `RUNBOOK.md`. `health.json` publie `budget_s` et, pour
   le complet, `tour_s` (`SPINDEX_VEILLEUR_TOUR_DIFFERENTIEL_COMPLET_S`, défaut = la période de la tâche).
   Coûts mesurés : `mesures/segments-2026-09-29.json`.
 - **Compte à rebours J+90 en premier et isolé** ; lot gagnant non réclamé = alerte **P2** dédiée.

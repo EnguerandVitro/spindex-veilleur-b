@@ -182,6 +182,13 @@ suivant le poursuit. Ce qui n'est PAS repris : la PASSE elle-même (un
 cache perdu sur un contrat âgé se re-fige par pas de 200 appels, sauvés par l'état partiel, mais la passe qui
 le fait n'a pas de budget).
 
+**Garde de publication de `etat/` (2026-09-29) : `outils/publier_etat.sh`**, jouée par l'étape « Publier » ET par
+`etat_partiel.sh`, et exercée par le banc (jambes K3 à K3l). Elle REFUSE (sortie 1, rien copié) un `etat/`
+qui porte un cache de journaux CONTREDIT resté en place, sur l'une OU l'autre de deux preuves indépendantes : le
+marqueur `travail/CACHE_CONTREDIT` posé par `executer.sh`, ou une preuve LOCALE (rapport `état: DIVERGENT` de CETTE
+exécution — compteur avancé par rapport au battement publié — ou preuve D DIVERGENTE de l'amorçage, avec
+`etat/journaux` présent) : un `touch` en échec ne fait pas échouer ouvert (KE#104). « De cette exécution » est PROUVÉ : compteur du battement avancé, et rapport postérieur à `travail/DEBUT` (instant écrit par `executer.sh` ; illisible ⇒ tenu pour frais) — un rapport DIVERGENT d'hier sous une exécution en panne ne bloque pas la publication de cette panne (KE#105).
+
 **Propriété nouvelle, à garder en tête : tout ce qui est dans `etat/` survit à un échec.** C'est voulu pour
 le cache, et c'est pourquoi deux gardes l'accompagnent : un cache que D a CONTREDIT est écarté hors de
 `etat/` par `executer.sh` avant toute publication (sinon chaque job le reprendrait et refuserait pour
@@ -430,8 +437,8 @@ print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryp
 " > /tmp/cle-banc.hex
 
 # BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 14 jambes (A à N), 64 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 47 cassures : chaque garde est-elle portante ?
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 14 jambes (A à N), 75 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 56 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin
@@ -449,6 +456,35 @@ rougira jamais), puis une par garde. `python3 -B` et purge des `__pycache__` ent
 (KE#117), sauvegarde + `trap` + vérification que l'arbre est revenu à l'identique (KE#122).
 
 ---
+
+## Finalité violée : l'acquittement est un geste HUMAIN (procédure pour `b`)
+
+Une preuve de finalité violée (`refus / differentiel_finalite_violee`, P0) vit dans `etat/` sur la branche
+`attestations` ; elle est re-publiée à chaque exécution et **n'est jamais acquittée automatiquement** (procédure
+générale : `veilleur/RUNBOOK.md`). Pour `b`, dans cet ordre :
+
+1. **Suspendre le workflow** : `gh workflow disable veilleur-b.yml`, puis attendre que
+   `gh run list --workflow veilleur-b.yml --status in_progress` soit vide (le groupe `concurrency` ne couvre PAS
+   une poussée humaine).
+2. **Cloner la branche** : `git clone --branch attestations <dépôt> b-attest` et un checkout de `master` à côté (pour
+   le paquet `veilleur/`).
+3. **Un `.env` d'acquittement SANS AUCUN SECRET**, hors du clone (jamais commité) :
+   `SPINDEX_CHAIN_ID`, `SPINDEX_REWARDS_ADDR`, `SPINDEX_REWARDS_DEPLOY_BLOCK`, `SPINDEX_MULTICALL3`,
+   `SPINDEX_TABLES_BASE_URL` (valeurs de `config/chaine-46630.json`) ; `SPINDEX_RPC_URL` = l'URL PUBLIQUE de
+   `rpc_etat` avec `SPINDEX_RPC_PROFIL` = son profil (aucun appel n'est fait) ; `SPINDEX_CONTRACTS_DIR` =
+   `<master>/veilleur/public` ; `SPINDEX_VEILLEUR_STATE_DIR` = `<b-attest>/etat` ; `SPINDEX_VEILLEUR_INSTANCE='b'` ;
+   `SPINDEX_VEILLEUR_PLANIFICATEUR='github-actions'` et les trois `SPINDEX_VEILLEUR_PERIODE_<TÂCHE>_S='non-planifiée'` ;
+   **`SPINDEX_ATTEST_KEY_FILE='/dev/null'`** — le paquet exige ce CHEMIN mais `acquitter-finalite` ne lit AUCUNE clé
+   (vérifié le 2026-09-29 : acquittement réussi sans `SPINDEX_B_ATTEST_KEY_HEX`, clé factice `/dev/null`). **La vraie
+   clé de signature de `b` ne se pose JAMAIS sur un poste humain.**
+4. **Acquitter** chaque preuve par son empreinte exacte (lue dans `etat/derniere-differentiel-*.json`) :
+   `cd <master> && SPINDEX_VEILLEUR_ENV=<.env> python3 -B -m veilleur acquitter-finalite --preuve <empreinte>`.
+5. **Publier** : `git -C b-attest add etat/` (y compris `etat/preuves-acquittees/`), commit, `git push` **SANS
+   `--force`**. Refusé : recloner et refaire l'acquittement ; ne JAMAIS résoudre un conflit JSON d'état à la main.
+6. **Réactiver le workflow** : `gh workflow enable veilleur-b.yml`.
+
+**Couverture de `outils/` par `SCEAU.json` (P2, décision du coordinateur)** : le sceau ne couvre que `veilleur/` ;
+`outils/` est attesté par le COMMIT exécuté, que chaque lot publie (`exécution`). Non bloquant, noté ici.
 
 ## Entretien
 

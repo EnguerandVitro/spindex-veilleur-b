@@ -11,6 +11,7 @@
                                         [--échéance-ts <epoch>]
                                                   # cache figé == chaîne, REPRENABLE par segments
                                                   # (quotidien : le neuf ; complet : tours depuis le déploiement)
+    python3 -B -m veilleur acquitter-finalite --preuve <empreinte>   # geste HUMAIN, archivé et journalisé
     python3 -B -m veilleur amorcer --instance a|b --tx-deploiement 0x… [--échéance-ts <epoch>]
                                                   # à faire DÈS le déploiement du contrat (README)
     python3 -B -m veilleur avant-postweek  --week <id> [--table <dossier|url>]
@@ -87,6 +88,9 @@ def main(argv=None):
                         "avant, publie « partiel, N segments sur M » et reprend à l'exécution suivante")
     p.add_argument("--nouveau-tour", dest="nouveau_tour", action="store_true",
                    help="portée complète, À LA MAIN : commencer un tour neuf même si le précédent n'est pas échu")
+    p = sub.add_parser("acquitter-finalite")
+    p.add_argument("--preuve", required=True,
+                   help="EMPREINTE exacte (64 hexa) de la preuve de finalité violée, lue dans derniere-differentiel-*.json")
     p = sub.add_parser("amorcer")
     p.add_argument("--instance", required=True, choices=("a", "b"))
     p.add_argument("--tx-deploiement", required=True,
@@ -218,6 +222,14 @@ def main(argv=None):
         if getattr(a, "depuis_zéro", False):
             s.reprise = "complet"
         v = _veilleur(s)
+
+        if a.cmd == "acquitter-finalite":
+            # geste HUMAIN : qui et quand sont journalisés, la preuve est archivée, jamais effacée
+            import getpass
+            from .segments import acquitter_finalite
+            arch = acquitter_finalite(s.state_dir, a.preuve, getpass.getuser())
+            print(json.dumps(arch, ensure_ascii=False, indent=1))
+            return 0
 
         if a.cmd == "amorcer":
             from .amorcage import amorcer
@@ -390,6 +402,23 @@ def _executer(a, tache):
         code = getattr(e, "code_battement", None) or (
             "rpc_error" if isinstance(e, RpcUnavailable) else "exception:" + type(e).__name__)
         detail = str(e)[:400]
+    # Revue 2026-09-29 (P0-1) : une preuve de finalité violée persistée PRIME aussi sur le chemin d'EXCEPTION — une
+    # panne RPC, un verrou pris ou un fournisseur en retard ne doivent jamais faire disparaître le P0 du battement.
+    # Aucune exclusion par code (contre-revue P1-B : une clé d'attestation absente arrive en `configuration` avec un
+    # état lisible) ; seule `chaine_inattendue` GARDE son code — P0 distinct — et cite la preuve dans `detail`.
+    if tache != "passe" and resultat == "erreur":
+        try:
+            from .segments import preuves_en_attente
+            pr = preuves_en_attente(s.state_dir)
+        except Exception:  # noqa: BLE001 — sans état lisible, rien à re-publier ici
+            pr = []
+        if pr and code == "chaine_inattendue":
+            detail = (f"{detail} ; ET {len(pr)} preuve(s) de finalité violée en attente "
+                      f"({pr[0].get('empreinte')})")[:400]
+        elif pr:
+            detail = (f"{str(pr[0].get('motif'))[:150]} — preuve {pr[0].get('empreinte')} ({len(pr)} en attente, "
+                      f"acquittement HUMAIN) ; exécution en {code} : {detail}")[:400]
+            resultat, code = "refus", "differentiel_finalite_violee"
     # ---- APRÈS le travail, y compris en échec : durée, battement de la tâche, health.json
     if bat is None and a.battement_dir:
         try:
@@ -424,6 +453,7 @@ def _executer(a, tache):
         detail = f"durées / health.json non écrits : {type(e).__name__} : {e}"[:400]
     doc = bat.ecrire(resultat, code, detail, bloc, rpc=rpc, couverture=couverture,
                      couverture_estimation=estimation)
+    # KE#160 (décision du 2026-09-29) : aucune preuve de finalité n'est acquittée ici — `acquitter-finalite`, à la main.
     print(f"battement {tache} : passe {doc['passe']} {doc['resultat']} {doc['code'] or ''} "
           f"({time.strftime('%H:%M:%S')})", file=sys.stderr)
     return sortie_de(doc)

@@ -138,14 +138,12 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          B_TACHE: ${{ inputs.tache || 'passe' }}
         run: |
           set -e
-          if [ -f travail/CACHE_CONTREDIT ]; then
-            # KE#151 : un cache CONTREDIT que executer.sh n'a pas pu écarter reste dans travail/etat — rien n'est
-            # publié (ni état, ni lot adossé à cet état) : chaque job suivant le reprendrait et refuserait
-            echo "::error title=veilleur b::publication BLOQUÉE : cache de journaux CONTREDIT resté dans etat/ (CACHE_CONTREDIT) ; intervention humaine"
-            exit 1
-          fi
+          # KE#151 : un cache CONTREDIT resté dans travail/etat (marqueur OU preuve locale, KE#104) — rien n'est publié,
+          # ni état, ni lot adossé à cet état. La garde vit dans un script joué par le banc (jambe K3), pas ici.
+          bash outils/publier_etat.sh garde travail publication "$B_TACHE"
           if [ ! -f lot/MANIFESTE.json ]; then
             # Pas de lot signé. Mais un amorçage interrompu a pu figer des segments de journaux : on les
             # sauve (non signés, et le commit le dit) pour que le job suivant REPRENNE au lieu de repartir
@@ -153,7 +151,7 @@ jobs:
             git -C publication config user.name  "veilleur-b"
             git -C publication config user.email "veilleur-b@users.noreply.github.com"
             EP=0
-            bash outils/etat_partiel.sh travail publication || EP=$?
+            bash outils/etat_partiel.sh travail publication "$B_TACHE" || EP=$?
             case "$EP" in
               0) git -C publication remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
                  bash outils/pousser.sh publication "état partiel"
@@ -186,10 +184,7 @@ jobs:
 
           # l'état de travail, pour l'exécution suivante — jamais un fichier de type secret, ni un verrou
           # ou un fichier temporaire d'écriture atomique interrompue (sans valeur hors de la machine)
-          bash outils/etat_sain.sh travail/etat
-          rm -rf publication/etat && mkdir -p publication/etat
-          cp -r travail/etat/. publication/etat/
-          find publication/etat \( -name '*.verrou' -o -name '.verrou' -o -name '*.tmp' \) -type f -delete
+          bash outils/publier_etat.sh copier travail publication "$B_TACHE"
           # le vérificateur voyage avec les lots : un lecteur n'a besoin de rien d'autre
           cp outils/verifier_lot.py publication/verifier_lot.py
 

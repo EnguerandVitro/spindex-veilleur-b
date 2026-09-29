@@ -1,16 +1,16 @@
 {
- "empreinte_sources_attendue": "e07912f2f91441ef6f0c3197e1f35f0502812938b5ad3b8564b654a7daa527fa",
+ "empreinte_sources_attendue": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "fichiers": {
   "veilleur/.env.exemple": "af34ef8be2d5c82c97bf5c89622bddd0c07f4f331a1fb5f4eef3166f5bf88849",
-  "veilleur/FIGE.json": "ad1f5368e2015a06dbc9c387f6a4eaf1e4435d21ea3964be9f51471d5f758fa9",
-  "veilleur/LIVRAISON.json": "a6b2048c94a94e4a3c6d22f19ee05967c773d4f0ba96f3ae9f53c6ee273d5f36",
-  "veilleur/README.md": "b657573e9f79601da4b11d2cea0810c0095509676853ec3470aca3ac815cbcf6",
+  "veilleur/FIGE.json": "821118672b1082d980a7df0eba79c08883adfa7f8f81d3d80e76c4d2ba752a21",
+  "veilleur/LIVRAISON.json": "b65eaddb410d70913003223d5ba21fc89e183707ec0fa063e7be4cae997c04bd",
+  "veilleur/README.md": "4b23b326827e5672870b2483ce00eff978f91530e9bf035447b0b3dd3bcebd19",
   "veilleur/__init__.py": "5e01579210fd17958e57b808adb94050db1d51c84a29678f867bc840c40549cc",
-  "veilleur/__main__.py": "590d813b84a5d272c81e5dd40485ae413c38f9310c7b5d935403e0b18b56e2d0",
-  "veilleur/amorcage.py": "0bb71654e33e5a798527541bf09aaa851d9ff741541aee53eab464a6d652d40f",
+  "veilleur/__main__.py": "62dd7d6f5baef47923e934fffd0bacf1d6d78c6cc5eb43b77b52fb53c54396eb",
+  "veilleur/amorcage.py": "14a4c5a7ee5d681344f66970f74dfe4dfd6dcba49b1801d26b8df1c83471665f",
   "veilleur/artefacts.py": "82826a9cb693f4ec4c0d66b73117e4191cf9f1be516e7ad13501398f2a4a2e1c",
   "veilleur/attest.py": "1c38e843ffd671018c00fee65ac4485aa7302ab81a4619383612058d441c8cee",
-  "veilleur/battement.py": "dbbf331fb011d62e0702ac0885ed8cfdd17f9a80724e3ea142fd1ffc77553c72",
+  "veilleur/battement.py": "d60600ccfd8d06ff63a91bdca99d30a29b36a40253e58a1486cd40acf73a0757",
   "veilleur/chainabi.py": "467fcf800bc8c5d94730284ebe8e4984bb311958afc326644c61f5113b0887da",
   "veilleur/chainread.py": "41255593e4efd56c0d0c78dacea0c8013bab8f20866e267e24f745dea0a074e4",
   "veilleur/compte_a_rebours.py": "121228cde7a11d6beb432a063d7688a0a2bc01c5ffea332db214b40701b35196",
@@ -29,8 +29,8 @@
   "veilleur/public/rewards_constants.json": "33435f434151bf63c63befcae13f5536c72e93c32ead9e0913a79fd27dd2f85c",
   "veilleur/public_verify.py": "7eb6bbe92cf0b15b3df888444050f8163a65054a8800f5f3b2251e13eedd4181",
   "veilleur/reconstruct.py": "098f7eb5e907f9831b9dfb112f1225bf89f2834e553305bfdce349c993bfab09",
-  "veilleur/rpc.py": "45805db5fcdd672b0f2f5eb7d9d52c371b46d58938be54da1bd7423b72725bf0",
-  "veilleur/segments.py": "5587d8036733c91d868425750c21c1446ffb545d701635094c84845ae9811fe7",
+  "veilleur/rpc.py": "a8131ea5bced345d8eef91f1d44fb103472ff8431f031a856f867b7681d05af3",
+  "veilleur/segments.py": "fab5991c94b2f9fbff53ac6662d169f40887e82076e28ee1c6f7d21252b8446c",
   "veilleur/service.py": "aa7d6eebfb36fa1f1b44f56b3c9188f94f48d914cb6261c390e042358871d179",
   "veilleur/tables.py": "c91a939cf56f829504b5c2b4c805521512df73350b9365a99257c1b8520f3115",
   "veilleur/verdict.py": "652ea9fa7028d0f06d0a2b054b4aec89535db0ab3cb5eda24c1c59469afb8394",
@@ -38,6 +38,7 @@
  },
  "format": 1,
  "non_copies_du_scelle": [
+  "backend/veilleur/RUNBOOK.md",
   "backend/veilleur/bench/cassures.py",
   "backend/veilleur/bench/conftest.py",
   "backend/veilleur/bench/e2e_anvil.py",
@@ -95,12 +96,12 @@
  "pourquoi_non_copies": "banc, unités systemd, mesures et outils de la famille : ils ne sont pas exécutés par le job. Ils n'entrent pas non plus dans empreinte_sources(), qui ne porte que sur les *.py de la RACINE du paquet.",
  "quoi": "empreintes de la COPIE du paquet scellé backend/veilleur, telle qu'elle est exécutée par le job GitHub Actions de l'instance b",
  "source": {
-  "atelier": "veilleur (différentiels reprenables, BATTEMENT v1.3, revue + contre-revue corrigées, 2026-09-29)",
+  "atelier": "veilleur (finalité : acquittement humain seul ; revue + contre-revue corrigées ; cassures 278/278, 2026-09-29)",
   "famille": "backend/veilleur",
-  "fige_json_sha256": "ad1f5368e2015a06dbc9c387f6a4eaf1e4435d21ea3964be9f51471d5f758fa9",
-  "fige_json_sha256_declare_par_la_livraison": "ad1f5368e2015a06dbc9c387f6a4eaf1e4435d21ea3964be9f51471d5f758fa9",
-  "release": "1f5a464ee4a04af3542fd877f1f9f468afddac9a09b5a46b0079ab4f60f4c47c",
-  "release_construite_le": "2026-09-29T07:16:02Z",
-  "scelle_le": "2026-09-29T07:15:23Z"
+  "fige_json_sha256": "821118672b1082d980a7df0eba79c08883adfa7f8f81d3d80e76c4d2ba752a21",
+  "fige_json_sha256_declare_par_la_livraison": "821118672b1082d980a7df0eba79c08883adfa7f8f81d3d80e76c4d2ba752a21",
+  "release": "c32d45f14782c150d47154e4af6f3c24ff6d7e2281f72fa979aa47ac94331508",
+  "release_construite_le": "2026-09-29T14:03:40Z",
+  "scelle_le": "2026-09-29T14:03:25Z"
  }
 }

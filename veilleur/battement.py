@@ -257,6 +257,14 @@ class Battement:
         if couverture is not None:
             if set(couverture) != set(CLES_COUVERTURE):          # format IMPOSÉ, nom pour nom
                 incoherence = f"couverture hors format {sorted(couverture)} ≠ {sorted(CLES_COUVERTURE)}"
+            elif any(isinstance(couverture[k], bool) or not isinstance(couverture[k], int)
+                     for k in ("bloc_debut", "bloc_fin_cible", "bloc_fin_verifie", "segments_verifies",
+                               "segments_total")):
+                # champs NUMÉRIQUES : des entiers, jamais un booléen (True == 1 en Python)
+                incoherence = "couverture : un champ numérique n'est pas un entier (booléen ou autre)"
+            elif not isinstance(couverture["complet"], bool):
+                # `complet` est un BOOLÉEN (v1.3) : 1, "true" ou None ne passent pas pour vrai en silence
+                incoherence = f"couverture : complet={couverture['complet']!r} n'est pas un booléen"
             elif couverture["complet"] != (couverture["bloc_fin_verifie"] == couverture["bloc_fin_cible"]
                                            and couverture["segments_verifies"] == couverture["segments_total"]):
                 incoherence = f"couverture incohérente : complet={couverture['complet']} contredit l'invariant"
@@ -526,12 +534,18 @@ def qualifier_differentiel(res):
     etat = res.get("état")
     cv = resume_couverture(res.get("couverture"), res.get("couverture_estimation"))
     # Une borne dont le hash a CHANGÉ sous `finalized` (finalité violée, chaîne rejouée — KE#132) est un incident en
-    # soi : jamais absorbé dans un `ok`, même quand la relecture redevient IDENTIQUE (KE#105).
+    # soi : jamais absorbé dans un `ok`, même quand la relecture redevient IDENTIQUE (KE#105) — et elle PRIME sur tout
+    # autre code, DIVERGENT compris (vu par l'atelier surveillance le 2026-09-29 : sur un état DIVERGENT, le code
+    # `differentiel_divergent` masquait le P0 de finalité). La divergence, elle, reste DITE dans `detail`.
     viol = [i for i in (res.get("invalidations") or []) if i.get("finalité_violée")] + \
         list(res.get("finalités_violées") or [])
-    if viol and etat in ("IDENTIQUE", "PARTIEL", "VACUE"):
+    if viol:
+        emp = next((v.get("empreinte") for v in viol if v.get("empreinte")), None)
         return "refus", "differentiel_finalite_violee", (
-            f"{viol[0]['motif'][:300]} — état après relecture : {etat}" + (f" ({cv})" if cv else ""))
+            f"{viol[0]['motif'][:200]} — état après relecture : {etat}"
+            + (f" — preuve {emp} (acquittement HUMAIN : acquitter-finalite --preuve)" if emp else "")
+            + (" (le cache est AUSSI contredit : " + str(res.get("motif"))[:120] + ")" if etat == "DIVERGENT" else "")
+            + (f" ({cv})" if cv else ""))
     if etat == "IDENTIQUE":
         return "ok", None, ("couverture COMPLÈTE : " + cv) if cv else None
     if etat == "DIVERGENT":

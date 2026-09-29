@@ -23,7 +23,9 @@ set -uo pipefail
 # Échéance d arrêt PROPRE des différentiels, comptée depuis MAINTENANT : l étape « Veiller » est tuée à 36 min,
 # et un différentiel tué ne publie ni battement ni point de reprise. Lue plus bas, après validation de la
 # configuration par preparer.py ; l horloge, elle, part d ici.
-DEBUT="$(date +%s)"
+# À la NANOSECONDE (KE#164) : une restauration de `etat/` faite dans la même seconde que ce début aurait, avec
+# `date +%s` et une comparaison `>=`, des mtime « postérieures » — un rapport d'hier passerait pour frais.
+DEBUT="$(date +%s.%N)"
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Pas d apostrophe dans ce message : bash ouvre une citation sur le ' contenu dans ${VAR:?mot}.
@@ -42,6 +44,23 @@ rm -f "$ETAT/ARRET.json"     # marqueur d'amorçage interrompu : jamais hérité
 rm -f "$ETAT/ETAPE.json"     # étape EN COURS (lue par la Barrière si « Veiller » est tué au délai)
 rm -f "$ETAT/CACHE_CONTREDIT"   # marqueur « cache contredit NON écarté » : jamais hérité
 rm -f "$ETAT/JUGEMENT.json"     # un jugement d'une exécution précédente ne doit pas être lu comme celui-ci
+# L'instant de DÉBUT de cette exécution, ÉCRIT (jamais une mtime copiée : `cp -r` sans `-p` remet les mtime au
+# moment de la restauration) : publier_etat.sh s'en sert pour savoir si un rapport `derniere-*.json` est d'ICI.
+echo "$DEBUT" > "$ETAT/DEBUT"
+# DEBUT doit être posé APRÈS toute restauration de `etat/` : sinon un fichier restauré aurait une mtime postérieure
+# et un rapport d'hier redeviendrait « de cette exécution ». Vérifié ici, sur les fichiers déjà présents, AVANT que
+# quoi que ce soit n'écrive dans `etat/` — un écart est un ARRÊT nommé, jamais un jugement faussé.
+if ! python3 -B - "$ETAT/etat" "$DEBUT" <<'PYEOF'
+import os, sys
+racine, debut = sys.argv[1], float(sys.argv[2])
+tard = [os.path.join(d, f) for d, _, fs in os.walk(racine) for f in fs
+        if os.path.getmtime(os.path.join(d, f)) >= debut]
+if tard:
+    print(f"ARRÊT : {len(tard)} fichier(s) de etat/ restauré(s) APRÈS le DEBUT de cette exécution ({tard[0]}) : "
+          f"la fraîcheur des rapports serait fausse (KE#164). Restaurer AVANT de lancer executer.sh.", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+then exit 2; fi
 # KE#151 : écarter un cache CONTREDIT hors de `etat/`. Si ni le déplacement ni la suppression n'aboutissent, le
 # cache est TOUJOURS là : on le DIT et on pose `CACHE_CONTREDIT`, qui interdit toute publication de `etat/`
 # (etat_partiel.sh, étape « Publier ») — jamais un « SUPPRIMÉ » affiché sur un cache resté en place.
@@ -77,7 +96,7 @@ export SPINDEX_VEILLEUR_ENV="$ETAT/veilleur-b.env"
 BUDGET="$("${PY[@]}" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["budget_veiller_s"])' "$CONFIG")" \
   || { echo "ARRÊT : budget_veiller_s illisible dans $CONFIG." >&2; exit 2; }
 if [ -n "${B_BUDGET_S:-}" ] && [ "$B_BUDGET_S" -lt "$BUDGET" ]; then BUDGET="$B_BUDGET_S"; fi
-ECHEANCE=$((DEBUT + BUDGET))
+ECHEANCE=$(( ${DEBUT%.*} + BUDGET ))
 echo "    échéance d arrêt propre des différentiels : $(date -u -d "@$ECHEANCE" +%H:%M:%SZ) (budget $BUDGET s)"
 
 # ---------------------------------------------------------------- 2bis. état d'un AUTRE déploiement ?
@@ -162,11 +181,11 @@ else
   # ne doit pas être republié dans `etat/` — chaque job le reprendrait et refuserait pour toujours. Il est
   # écarté (conservé pour examen, jamais publié) ; la passe suivante re-fige depuis le déploiement. Les points
   # de reprise du différentiel restent : le contrôle (i) les invalide si le cache reconstruit diffère.
-  # rapport écrit PAR CETTE exécution seulement (mtime ≥ début) : un DIVERGENT d hier ne doit pas faire écarter
+  # rapport écrit PAR CETTE exécution seulement (mtime STRICTEMENT > début, à la ns) : un DIVERGENT d hier ne doit pas faire écarter
   # le cache reconstruit depuis
   D_TACHE="$("${PY[@]}" -c 'import json,os,sys
 try:
-    p=sys.argv[1]; print(json.load(open(p,encoding="utf-8")).get("état","") if os.path.getmtime(p) >= int(sys.argv[2]) else "")
+    p=sys.argv[1]; print(json.load(open(p,encoding="utf-8")).get("état","") if os.path.getmtime(p) > float(sys.argv[2]) else "")
 except Exception: print("")' "$ETAT/etat/derniere-$TACHE.json" "$DEBUT")"
   if [ "$D_TACHE" = "DIVERGENT" ] && [ -d "$ETAT/etat/journaux" ]; then
     ecarter_cache "$TACHE DIVERGENT"

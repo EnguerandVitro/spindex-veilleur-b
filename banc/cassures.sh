@@ -26,7 +26,7 @@ CLE="${2:?ARRET : fichier de cle de banc attendu}"
 SAUVE="$TRAVAIL/sauvegarde"
 export PYTHONDONTWRITEBYTECODE=1
 
-A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh outils/etat_partiel.sh outils/etat_sain.sh outils/publier.py)
+A_SAUVER=(outils/publier_etat.sh outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh outils/etat_partiel.sh outils/etat_sain.sh outils/publier.py)
 
 empreinte_arbre() {
   ( cd "$RACINE" && for f in "${A_SAUVER[@]}"; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1 )
@@ -355,7 +355,7 @@ open(p, "w", encoding="utf-8").write(s2)
 
 echo
 echo "--- 25 : l état partiel d un amorçage interrompu n est plus sauvé (reprise du bloc de déploiement)"
-casser etat_partiel "publication" outils/etat_partiel.sh '
+casser etat_partiel "publication" outils/publier_etat.sh '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -377,7 +377,7 @@ open(p, "w", encoding="utf-8").write(s2)
 
 echo
 echo "--- 27 : un état non inscriptible redevient un succès muet"
-casser etat_non_inscriptible "publication" outils/etat_partiel.sh '
+casser etat_non_inscriptible "publication" outils/publier_etat.sh '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -574,12 +574,35 @@ open(p, "w", encoding="utf-8").write(s2)
 '
 
 echo
-echo "--- 43 : l état partiel se publie malgré le marqueur CACHE_CONTREDIT"
-casser etat_partiel_marqueur "cache_contredit" outils/etat_partiel.sh '
+echo "--- 43 : le marqueur CACHE_CONTREDIT n est plus lu par la garde de publication"
+casser publier_marqueur "cache_contredit" outils/publier_etat.sh '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s2 = s.replace("if [ -f \"$TRAVAIL/CACHE_CONTREDIT\" ]; then", "if false; then")
+s2 = s.replace("[ -f \"$TRAVAIL/CACHE_CONTREDIT\" ] && refus", "false && refus")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 45 : la preuve LOCALE n est plus lue (un touch en échec ferait échouer OUVERT, KE#104)"
+casser publier_preuve_locale "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("  [ -n \"$PREUVE\" ] && refus", "  false && refus")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 46 : l état partiel contourne la garde de publication"
+casser etat_partiel_garde "cache_contredit" outils/etat_partiel.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("bash \"$ICI/publier_etat.sh\" copier \"$TRAVAIL\" \"$PUB\" ${TACHE:+\"$TACHE\"} || exit 1",
+               "rm -rf \"$PUB/etat\" && mkdir -p \"$PUB/etat\" && cp -r \"$TRAVAIL/etat/.\" \"$PUB/etat/\"")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '
@@ -591,6 +614,83 @@ import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 s2 = s.replace("            if bat.get(\"resultat\") == \"partiel\":", "            if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 47 : la preuve locale lit le CODE du battement au lieu de l ÉTAT du rapport (muette si la finalité prime)"
+casser preuve_locale_etat "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace(" or (r_frais and r.get(\"état\") == \"DIVERGENT\")", "")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 48 : un DIVERGENT d hier restauré bloque la publication (compteur plus comparé : refus éternel)"
+casser preuve_locale_fraicheur "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    if int(b.get(\"passe\") or 0) > int(avant.get(\"passe\") or 0):", "    if True:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 49 : la preuve D DIVERGENTE de l amorçage n est plus une preuve locale"
+casser preuve_locale_amorcage "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if a and a.get(\"différentiel_D\") == \"DIVERGENT\":", "if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 50 : un rapport DIVERGENT d hier redevient une preuve (faux refus, battement de la vraie panne non publié)"
+casser rapport_frais "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("(r_frais and r.get(\"état\") == \"DIVERGENT\")", "(r.get(\"état\") == \"DIVERGENT\")")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 51 : DEBUT redevient à la SECONDE (une restauration de la même seconde rend frais le rapport d hier, KE#164)"
+casser debut_seconde "cache_contredit" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("DEBUT=\"$(date +%s.%N)\"", "DEBUT=\"$(date +%s)\"")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 52 : une restauration postérieure au DEBUT n est plus refusée"
+casser restauration_apres_debut "cache_contredit" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("then exit 2; fi\n", "then true; fi\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 53 : un rapport FRAIS DIVERGENT ne suffit plus sans compteur avancé (Veiller tué entre rapport et battement)"
+casser rapport_frais_seul "cache_contredit" outils/publier_etat.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    if debut_lisible and r_frais and r.get(\"état\") == \"DIVERGENT\":", "    if False:")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '
