@@ -20,6 +20,8 @@
 #                          journaux ÉCARTÉS hors de etat/ avant publication, ARRET (2) nommé
 #   L  fuite               une VRAIE passe dont l URL secrète porte un marqueur : aucun fichier écrit ou publié
 #                          (lot, état, battement, health, derniere-passe) ne le contient
+#   M  cadence/battements  health : période ATTENDUE 900 s et silence tiré du filet MESURÉ (≥ 32 400 s) ;
+#                          le lot porte le DERNIER battement de CHAQUE tâche, octets et horodatage d origine
 #   I  redéploiement       la configuration désigne un autre contrat que l état restauré : état ARCHIVÉ,
 #                          ré-amorçage (refusé ici, le contrat désigné étant faux)          attendu ARRET (2)
 #
@@ -39,7 +41,7 @@ RPC_VRAI="${BANC_RPC:-https://rpc.testnet.chain.robinhood.com}"
 RPC_AUTRE="${BANC_RPC_AUTRE:-https://rpc.mainnet.chain.robinhood.com}"
 # Filtre de jambes : les cassures synthétiques ne rejouent que la (ou les) jambe(s) qu elles visent,
 # pour que « rouge sur le test NOMMÉ » veuille dire quelque chose. Par défaut : toutes.
-JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit fuite}"
+JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit fuite cadence}"
 # Racine du PROJET (arbre source + frozen.py) : les contrôles de conformité à la SOURCE en ont besoin.
 PROJET="${BANC_PROJET:-$(dirname "$RACINE")}"
 voulue() { [[ " $JAMBES " == *" $1 "* ]]; }
@@ -514,6 +516,101 @@ if [ "$N" -ge 5 ] && [ -f "$TRAVAIL/fuite/etat/health.json" ] && [ -f "$TRAVAIL/
 else
   echo "  [fuite] ÉCHEC — marqueur trouvé ou couverture insuffisante ($N fichiers) : $(grep -rlF "$MARQ" "$TRAVAIL/fuite/etat" "$TRAVAIL/fuite/lot" 2>/dev/null | head -3 | tr '\n' ' ')"
   ECHECS+=("fuite"); ROUGES=$((ROUGES + 1))
+fi
+fi
+
+if voulue cadence; then
+echo
+echo "--- M : deux bornes nommées (période attendue / silence du filet mesuré) et un battement par tâche dans le lot"
+M="$TRAVAIL/cadence-lot"; rm -rf "$M" && mkdir -p "$M"
+jambe cadence 0 "$CONFIG_BANC" "$RPC_VRAI" "$(cat "$CLE")"
+if python3 -B - "$TRAVAIL/cadence/etat/health.json" <<'PYEOF'
+import json, sys
+t = json.load(open(sys.argv[1], encoding="utf-8"))["taches"]
+p, q, c = t["passe"], t["differentiel-quotidien"], t["differentiel-complet"]
+ok = (p["période_attendue_s"] == 900 and p["silence_max_s"] >= 32400 and "filet MESURÉ" in p["silence_max_source"]
+      and q["planifiée"] and q["période_s"] == 86400 and "SEUL" in (q.get("déclencheur") or "")
+      and c["planifiée"] is False)
+print(p["période_attendue_s"], p["silence_max_s"], q["période_s"], c["planifiée"])
+sys.exit(0 if ok else 1)
+PYEOF
+then echo "  [cadence] OK — passe 900 s attendue / silence ≥ 32 400 s (filet mesuré) ; quotidien 86 400 s externe ; complet non planifié"; VERTS=$((VERTS + 1))
+else echo "  [cadence] ÉCHEC — bornes publiées incorrectes"; ECHECS+=("cadence: bornes"); ROUGES=$((ROUGES + 1)); fi
+# le lot publié PAR LE JOB (executer.sh -> publier.py), avec l index EXIGÉ de tout lot : c est le
+# VÉRIFICATEUR qui doit dire si l index manque — indépendamment de tout contrôle du banc (KE#139)
+if ( cd "$TRAVAIL/cadence" && SPINDEX_B_INDEX_EXIGE_DEPUIS=0 python3 -B "$RACINE/outils/verifier_lot.py" --lot lot --clé-publique "$TRAVAIL/cadence/attest-b.pub" > "$TRAVAIL/cadence-verif.log" 2>&1 ); then
+  echo "  [cadence] OK — lot publié par le job accepté par le vérificateur, index EXIGÉ"; VERTS=$((VERTS + 1))
+else echo "  [cadence] ÉCHEC — vérificateur : $(head -1 "$TRAVAIL/cadence-verif.log")"; ECHECS+=("cadence: index exigé"); ROUGES=$((ROUGES + 1)); fi
+# un battement ANCIEN d une autre tâche dans l état : il doit sortir dans le lot tel quel, horodatage d origine
+cp -r "$TRAVAIL/cadence/etat" "$M/etat"
+python3 -B - "$M/etat/battement-differentiel-quotidien.json" <<'PYEOF'
+import json, sys
+json.dump({"format": 1, "service": "veilleur", "instance": "b", "tache": "differentiel-quotidien", "ts": 1790000000,
+           "passe": 7, "bloc": 1, "resultat": "ok", "code": None, "detail": None, "empreinte": "0" * 64,
+           "rpc": {}, "fournisseurs": None}, open(sys.argv[1], "w", encoding="utf-8"), ensure_ascii=False)
+PYEOF
+code=0
+python3 -B "$RACINE/outils/publier.py" --etat "$M/etat" --lot "$M/lot" --cle "$TRAVAIL/cadence/attest-b.hex" \
+  --sceau "$RACINE/SCEAU.json" --jugement "$TRAVAIL/cadence/lot/JUGEMENT.json" --config "$CONFIG_BANC" > "$M/publier.log" 2>&1 || code=$?
+if [ "$code" = 0 ] && cmp -s "$M/etat/battement-differentiel-quotidien.json" "$M/lot/battement-differentiel-quotidien.json" \
+   && python3 -B - "$M/lot/MANIFESTE.json" <<'PYEOF'
+import json, sys
+b = json.load(open(sys.argv[1], encoding="utf-8"))["battements"]
+ok = (set(b) == {"passe", "differentiel-quotidien", "differentiel-complet"}
+      and b["differentiel-quotidien"]["présent"] and b["differentiel-quotidien"]["ts_origine"] == 1790000000
+      and b["passe"]["présent"] and b["differentiel-complet"]["présent"] is False)
+sys.exit(0 if ok else 1)
+PYEOF
+then
+  if ( cd "$M" && python3 -B "$RACINE/outils/verifier_lot.py" --lot lot --clé-publique "$TRAVAIL/cadence/attest-b.pub" >/dev/null 2>&1 ); then
+    echo "  [cadence] OK — lot : 3 tâches indexées, battement quotidien d origine (ts 1790000000) signé, complet DIT absent"; VERTS=$((VERTS + 1))
+    # parité (KE#94) : les tâches écrites en clair dans le vérificateur autonome == celles du paquet
+    if python3 -B -c "import sys; sys.path[:0]=['$RACINE','$RACINE/outils']; import verifier_lot as v; from veilleur.battement import TACHES; sys.exit(0 if set(TACHES)==set(v.TACHES_INDEXEES) else 1)"; then
+      echo "  [cadence] OK — parité TACHES du paquet == TACHES_INDEXEES du vérificateur"; VERTS=$((VERTS + 1))
+    else echo "  [cadence] ÉCHEC — le vérificateur et le paquet ne connaissent pas les mêmes tâches"; ECHECS+=("cadence: parité"); ROUGES=$((ROUGES + 1)); fi
+    # l index RE-SIGNÉ mais incohérent : REFUSÉ par le vérificateur, avec le bon motif
+    for mode in empreinte present sans_index cardinal hors_index; do
+      rm -rf "$M/lot-$mode" && cp -r "$M/lot" "$M/lot-$mode"
+      python3 -B - "$M/lot-$mode" "$TRAVAIL/cadence/attest-b.hex" "$RACINE" "$mode" <<'PYEOF'
+import hashlib, json, os, sys
+lot, cle, racine, mode = sys.argv[1:5]
+sys.path.insert(0, racine)
+from veilleur.attest import AttestKey
+from veilleur.verdict import canonical
+m = json.load(open(os.path.join(lot, "MANIFESTE.json"), encoding="utf-8"))
+if mode == "empreinte":
+    m["battements"]["passe"]["sha256"] = "0" * 64
+elif mode == "present":
+    m["battements"]["differentiel-complet"]["présent"] = True
+elif mode == "sans_index":
+    del m["battements"]
+elif mode == "cardinal":
+    del m["battements"]["differentiel-complet"]
+else:                                         # un battement épinglé que l index ne cite pas
+    open(os.path.join(lot, "battement-intrus.json"), "w").write("{}")
+    m["fichiers"]["battement-intrus.json"] = hashlib.sha256(b"{}").hexdigest()
+k = AttestKey.load(cle); p = canonical(m); d = b"spindex-veilleur-b-lot/1\n"
+s = json.load(open(os.path.join(lot, "SIGNATURE.json"), encoding="utf-8"))
+s["signature"] = k.sign(d + p).hex(); s["empreinte_manifeste_sha256"] = hashlib.sha256(p).hexdigest()
+json.dump(m, open(os.path.join(lot, "MANIFESTE.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, sort_keys=True)
+json.dump(s, open(os.path.join(lot, "SIGNATURE.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, sort_keys=True)
+PYEOF
+      if ( cd "$M" && SPINDEX_B_INDEX_EXIGE_DEPUIS=0 python3 -B "$RACINE/outils/verifier_lot.py" --lot "lot-$mode" --clé-publique "$TRAVAIL/cadence/attest-b.pub" > "$M/verif-$mode.log" 2>&1 ); then
+        echo "  [cadence] ÉCHEC — index incohérent ($mode) re-signé ACCEPTÉ"; ECHECS+=("cadence: index $mode"); ROUGES=$((ROUGES + 1))
+      elif grep -qE "index des battements|SANS index" "$M/verif-$mode.log"; then
+        echo "  [cadence] OK — index incohérent ($mode), signature valide : REFUSÉ par recoupement"; VERTS=$((VERTS + 1))
+      else
+        echo "  [cadence] ÉCHEC — refusé pour une autre raison ($mode) : $(head -1 "$M/verif-$mode.log")"; ECHECS+=("cadence: motif $mode"); ROUGES=$((ROUGES + 1))
+      fi
+    done
+    # un lot ANTÉRIEUR sans index, seuil par défaut : accepté, et SIGNALÉ comme tel
+    if ( cd "$M" && python3 -B "$RACINE/outils/verifier_lot.py" --lot lot-sans_index --clé-publique "$TRAVAIL/cadence/attest-b.pub" > "$M/verif-ancien.log" 2>&1 ) \
+       && grep -qF "absent" "$M/verif-ancien.log"; then
+      echo "  [cadence] OK — lot antérieur au seuil sans index : accepté et signalé"; VERTS=$((VERTS + 1))
+    else echo "  [cadence] ÉCHEC — lot antérieur mal traité (voir $M/verif-ancien.log)"; ECHECS+=("cadence: antérieur"); ROUGES=$((ROUGES + 1)); fi
+  else echo "  [cadence] ÉCHEC — lot à battements multiples non vérifiable"; ECHECS+=("cadence: signature"); ROUGES=$((ROUGES + 1)); fi
+else
+  echo "  [cadence] ÉCHEC — battements par tâche absents ou rafraîchis (voir $M/publier.log)"; ECHECS+=("cadence: battements"); ROUGES=$((ROUGES + 1))
 fi
 fi
 echo

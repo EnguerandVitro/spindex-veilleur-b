@@ -81,6 +81,18 @@ def cles_planification(tache):
             f"SPINDEX_VEILLEUR_DELAI_ALEATOIRE_{c}_S")
 
 
+def cles_filet(tache):
+    """Les deux clés `.env` du FILET de `tache` : le déclencheur de secours, dont le retard est MESURÉ.
+
+    Cas de `b` (2026-09-28) : déclenchée toutes les 15 min par `workflow_dispatch` depuis la machine de
+    surveillance (fraîcheur), avec le cron GitHub comme filet — cron que GitHub bride sur un dépôt public :
+    29 exécutions planifiées mesurées, écarts de 127 à 471 min. Une instance qui a un filet publie DEUX
+    bornes : la période ATTENDUE (déclencheur principal) et un silence maximal dérivé du retard MESURÉ du
+    filet — jamais de la période déclarée du cron (KE#130). Les deux clés vont ensemble, ou pas du tout."""
+    c = TACHES[tache]["clé"]
+    return f"SPINDEX_VEILLEUR_FILET_{c}_S", f"SPINDEX_VEILLEUR_FILET_{c}_SOURCE"
+
+
 def _entier(env, cle, minimum):
     v = (env.get(cle) or "").strip()
     if not v:
@@ -126,6 +138,17 @@ def planification(env):
                        "précision_s": _entier(env, kacc, 0),
                        "délai_aléatoire_s": _entier(env, krnd, 0),
                        "source": f"déclarée par {kper} / {kacc} / {krnd} dans le .env de l'instance"}
+        # Qui déclenche cette tâche, en clair (facultatif, publié tel quel) : « workflow_dispatch par la
+        # machine de surveillance », « timer systemd »… — pour qu'une tâche sans filet le DISE.
+        plan[tache]["déclencheur"] = (env.get(f"SPINDEX_VEILLEUR_DECLENCHEUR_{TACHES[tache]['clé']}") or "").strip() or None
+        kfil, ksrc = cles_filet(tache)
+        fil, src = (env.get(kfil) or "").strip(), (env.get(ksrc) or "").strip()
+        if fil or src:
+            if not (fil and src):
+                raise PlanificationError(f"ARRÊT : {kfil} et {ksrc} se déclarent ENSEMBLE : un filet sans la "
+                                         f"mesure qui le fonde (ou l'inverse) serait une borne inventée.")
+            plan[tache]["filet_s"] = _entier(env, kfil, plan[tache]["période_s"])
+            plan[tache]["filet_source"] = src
     if set(plan) != set(TACHES):                    # cardinal (KE#111)
         raise PlanificationError(f"ARRÊT : planification incomplète, {sorted(set(TACHES) - set(plan))} "
                                  f"sans déclaration.")
@@ -301,8 +324,22 @@ def derive(tache, pire_s, cadence=CADENCE_MAX_BLOCS_S, *, plan_tache):
     per = plan_tache["période_s"]
     silence = per + plan_tache["précision_s"] + plan_tache["délai_aléatoire_s"] + pire_s
     silence += per * int(pire_s // per)
+    # Le retard de BLOC se dérive du silence NOMINAL (déclencheur principal), jamais du filet : une instance
+    # qui bat toutes les 15 min mais lit une tête FIGÉE doit être prise en défaut en 15 min, pas en 9 h.
     retard = int(-(-((pire_s + silence) * cadence) // 1))
+    if plan_tache.get("filet_s"):
+        # Le déclencheur principal peut manquer (machine de surveillance arrêtée) : le silence admissible
+        # est alors celui du FILET, dont le retard est MESURÉ — le plus grand des deux.
+        silence = max(silence, plan_tache["filet_s"] + pire_s)
     return int(-(-silence // 1)), retard
+
+
+def retard_bloc_filet(pire_s, cadence, *, plan_tache):
+    """Retard de bloc admissible SI le déclencheur principal est tombé et que seul le filet déclenche.
+    Champ SÉPARÉ et nommé (`retard_bloc_max_filet`) : il ne doit jamais remplacer `retard_bloc_max`."""
+    if pire_s is None or not plan_tache.get("planifiée") or not plan_tache.get("filet_s"):
+        return None
+    return int(-(-((pire_s + plan_tache["filet_s"] + pire_s) * cadence) // 1))
 
 
 def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, *,
@@ -344,6 +381,14 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, 
             "période_provenance": "DÉCLARÉE par l'instance — " + pl["source"],
             "pire_exécution_s": pire, "pire_exécution_source": src,
             "silence_max_s": silence, "retard_bloc_max": retard,
+            # retard de bloc SI seul le filet déclenche — séparé : `retard_bloc_max` reste le nominal
+            "retard_bloc_max_filet": retard_bloc_filet(pire, cad, plan_tache=pl),
+            # DEUX bornes distinctes et nommées : la fraîcheur ATTENDUE (déclencheur principal) et le
+            # silence ADMISSIBLE (le filet, s'il y en a un, avec sa mesure).
+            "période_attendue_s": pl["période_s"],
+            "déclencheur": pl.get("déclencheur"),
+            "silence_max_source": (f"filet MESURÉ : {pl['filet_s']} s + pire — {pl['filet_source']}"
+                                   if pl.get("filet_s") else "dérivé de la période déclarée"),
             "formules": {"silence_max_s": "période + précision + délai_aléatoire + pire "
                                           "(+ une période par dépassement de la période)",
                          "retard_bloc_max": "ceil((pire + silence_max_s) × cadence_max)"},

@@ -1,16 +1,16 @@
 {
- "empreinte_sources_attendue": "76e0dcf70d7bc4ebb3e2e664bdb9b040cee8ba5a1d0c47a93ab0dc8befc1c56c",
+ "empreinte_sources_attendue": "e357d89a68791e65092915a89e02200d6c4a07e8e252fa53023a3c50f4f5081f",
  "fichiers": {
-  "veilleur/.env.exemple": "89deaea0ae9bd737516574939dab58e2d841a7e4bbd3a98e07f3be903702c1dd",
-  "veilleur/FIGE.json": "60483181648fe165c2decfca060ae6959ae27b1496be29bccbcf50fcc47bef5a",
-  "veilleur/LIVRAISON.json": "6a51616df8b5c952b85190bbf0b4fe2d7ca0bb5964fc2bd21b41a941526679ad",
+  "veilleur/.env.exemple": "7f349b98a0367822479b5983260812cc171faf852c24ca127971b6b57768a457",
+  "veilleur/FIGE.json": "4d75072384b59fd905eb7789d27c1cec58f4525b0c389c1e7bcdcea32bb60d34",
+  "veilleur/LIVRAISON.json": "937fbdb88e654e1a27a7912a9a729f6d59eb44d0dc42805366dc0dc9bbbda5ed",
   "veilleur/README.md": "44052022203b8221f8e05c32c95be66507caf3136ba1a9e5dc096efe6611e11d",
   "veilleur/__init__.py": "5e01579210fd17958e57b808adb94050db1d51c84a29678f867bc840c40549cc",
   "veilleur/__main__.py": "213baeff4eed708965bf714ff2c1c5aa6545487072496a79870e76cce0e8b1c5",
   "veilleur/amorcage.py": "3b36d77393bf09659554eaec74e23e6cf86a3c18136317897e04f8463a64cb1a",
   "veilleur/artefacts.py": "82826a9cb693f4ec4c0d66b73117e4191cf9f1be516e7ad13501398f2a4a2e1c",
   "veilleur/attest.py": "1c38e843ffd671018c00fee65ac4485aa7302ab81a4619383612058d441c8cee",
-  "veilleur/battement.py": "e3a6b462d26c56ab2a8f265eba3dc1f79fceee8db65565100c85f027ad8f31e3",
+  "veilleur/battement.py": "fc5891fd2ac4458df32b214a8455232d62698f4ccc6bcb1bee8613a5f6ec5513",
   "veilleur/chainabi.py": "467fcf800bc8c5d94730284ebe8e4984bb311958afc326644c61f5113b0887da",
   "veilleur/chainread.py": "41255593e4efd56c0d0c78dacea0c8013bab8f20866e267e24f745dea0a074e4",
   "veilleur/compte_a_rebours.py": "121228cde7a11d6beb432a063d7688a0a2bc01c5ffea332db214b40701b35196",
@@ -54,6 +54,7 @@
   "backend/veilleur/bench/test_exploitation.py",
   "backend/veilleur/bench/test_fenetre_archive.py",
   "backend/veilleur/bench/test_fenetre_besoin.py",
+  "backend/veilleur/bench/test_filet.py",
   "backend/veilleur/bench/test_fournisseur_par_role.py",
   "backend/veilleur/bench/test_garde_fous.py",
   "backend/veilleur/bench/test_hypotheses_fournisseur.py",
@@ -91,12 +92,12 @@
  "pourquoi_non_copies": "banc, unités systemd, mesures et outils de la famille : ils ne sont pas exécutés par le job. Ils n'entrent pas non plus dans empreinte_sources(), qui ne porte que sur les *.py de la RACINE du paquet.",
  "quoi": "empreintes de la COPIE du paquet scellé backend/veilleur, telle qu'elle est exécutée par le job GitHub Actions de l'instance b",
  "source": {
-  "atelier": "veilleur (journaux RELIÉS à la chaîne du fournisseur d'état : tête des journaux ≥ fin de segment, blockHash == hash d'état ; revue 2026-09-28)",
+  "atelier": "veilleur (retard de bloc NOMINAL hors filet, retard du filet publié à part ; revue 2026-09-28)",
   "famille": "backend/veilleur",
-  "fige_json_sha256": "60483181648fe165c2decfca060ae6959ae27b1496be29bccbcf50fcc47bef5a",
-  "fige_json_sha256_declare_par_la_livraison": "60483181648fe165c2decfca060ae6959ae27b1496be29bccbcf50fcc47bef5a",
-  "release": "d9fb94805dfd3200271a5ad913668cccd69233e36f5c72eb7495c5c2abec9f21",
-  "release_construite_le": "2026-09-28T21:39:44Z",
-  "scelle_le": "2026-09-28T21:30:43Z"
+  "fige_json_sha256": "4d75072384b59fd905eb7789d27c1cec58f4525b0c389c1e7bcdcea32bb60d34",
+  "fige_json_sha256_declare_par_la_livraison": "4d75072384b59fd905eb7789d27c1cec58f4525b0c389c1e7bcdcea32bb60d34",
+  "release": "3e07ad1972ff46ecea26a5723678dd2dca74f3c82c1d8d840bfb5ea3bf1f4b23",
+  "release_construite_le": "2026-09-28T23:43:05Z",
+  "scelle_le": "2026-09-28T23:33:08Z"
  }
 }

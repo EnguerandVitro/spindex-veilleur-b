@@ -19,11 +19,32 @@
   "seuils de temps": "identiques à ceux de l'instance a (~/.config/spindex/testnet/veilleur-a.env) ; window_need_s absent de ce .env, donc le défaut 480 s du paquet s'y applique et il est écrit ici en clair",
   "tables_base_url": "l'instance a vise un dossier LOCAL de la machine keeper, ce que b ne peut évidemment pas lire. b vise l'emplacement PUBLIÉ. C'est une différence VOULUE : elle rend b capable de constater qu'une table n'est pas publiée là où le public la cherche, ce que a ne peut pas voir.",
   "rpc_profil": "le secret SPINDEX_B_RPC_URL est chez dRPC (arbitrage coordinateur 2026-09-28 ; rapport veilleur §13 : 101 blocs par plage, refus en HTTP 400). outils/preparer.py REFUSE de démarrer si le domaine de l'URL secrète contredit ce profil, dans les deux sens.",
-  "rpc_etat": "arbitrage coordinateur 2026-09-28 (option 2) : dRPC gratuit ne sert plus l'état par numéro de bloc (mesures/rpc-drpc-etat-2026-09-28.json de la famille veilleur). Les JOURNAUX restent sur le secret (dRPC), l'ÉTAT passe par le RPC officiel PUBLIC — c'est le fournisseur de a : l'indépendance de b porte sur les journaux, PAS sur l'état."
+  "rpc_etat": "arbitrage coordinateur 2026-09-28 (option 2) : dRPC gratuit ne sert plus l'état par numéro de bloc (mesures/rpc-drpc-etat-2026-09-28.json de la famille veilleur). Les JOURNAUX restent sur le secret (dRPC), l'ÉTAT passe par le RPC officiel PUBLIC — c'est le fournisseur de a : l'indépendance de b porte sur les journaux, PAS sur l'état.",
+  "planification": "arbitrage coordinateur 2026-09-28 : la cadence de b vient de son DECLENCHEUR REEL (workflow_dispatch par la surveillance), pas du cron declare ; le silence admissible de la passe vient du retard MESURE du cron GitHub (filet). KE#130."
  },
  "rpc_profil": "drpc",
  "rpc_etat": {
   "url": "https://rpc.testnet.chain.robinhood.com",
   "profil": "robinhood-officiel"
+ },
+ "planification": {
+  "passe": {
+   "periode_s": 900,
+   "precision_s": 60,
+   "delai_aleatoire_s": 0,
+   "declencheur": "workflow_dispatch toutes les 15 min par la machine de surveillance ; filet : cron GitHub */15, bride",
+   "filet_s": 32400,
+   "filet_source": "29 executions planifiees GitHub du 2026-09-23T22:57Z au 2026-09-28T18:12Z, ecarts 127 a 471 min, mediane 238 min (API GitHub, mesure le 2026-09-28) ; filet = 471 min avec marge"
+  },
+  "differentiel-quotidien": {
+   "periode_s": 86400,
+   "precision_s": 600,
+   "delai_aleatoire_s": 0,
+   "declencheur": "workflow_dispatch une fois par jour a 04:37 UTC par la machine de surveillance ; declencheur externe SEUL, aucun filet"
+  },
+  "differentiel-complet": {
+   "non_planifiee": true,
+   "pourquoi": "relit toute la chaine depuis le deploiement : 5 488 appels (18 a 27 min) par JOUR d age du contrat, au-dela des 36 min du job des le 2026-09-30 ; tenu par l instance a (systemd, sans plafond) tant que le differentiel complet n est pas repris par segments"
+  }
  }
 }

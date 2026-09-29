@@ -152,8 +152,33 @@ def publier(etat_dir, lot_dir, cle_path, sceau_path, jugement_path=None, config_
     jug = {"verdict": j.get("verdict"), "tache": j.get("tache"),
            "motifs": [m["cle"] for m in (j.get("motifs") or [])]}
 
+    # Le DERNIER battement connu de CHAQUE tâche (pas seulement celle qui produit ce lot), tel qu'il est
+    # dans `etat/`, avec son horodatage d'ORIGINE — jamais rafraîchi : un battement recopié à l'heure du
+    # lot ferait passer une tâche morte pour vivante. Une tâche jamais exécutée est DITE absente, jamais
+    # déduite d'un silence. Signé avec le lot (cardinal = toutes les tâches, KE#111).
+    from veilleur.battement import TACHES
+    battements = {}
+    for t in sorted(TACHES):
+        nom = f"battement-{t}.json"
+        p_lot = os.path.join(lot_dir, nom)
+        if nom in copies:
+            # Pas de comparaison copie/source ici : `rassembler` vient de faire la copie, elle serait égale
+            # par construction et ne pourrait rougir sur aucune entrée (KE#129). Ce qui est prouvé, et par
+            # qui : l'empreinte ci-dessous est signée, et `verifier_lot.py` la RECOUPE avec le manifeste.
+            with open(p_lot, encoding="utf-8") as fh:
+                b = json.load(fh)
+            battements[t] = {"fichier": nom, "présent": True, "ts_origine": b.get("ts"), "passe": b.get("passe"),
+                             "resultat": b.get("resultat"), "sha256": sha256(p_lot)}
+        else:
+            battements[t] = {"fichier": nom, "présent": False,
+                             "à_savoir": "aucune exécution de cette tâche n'a encore laissé de battement "
+                                         "sur cette instance"}
+    if set(battements) != set(TACHES):
+        raise PublierError(f"ARRÊT : index des battements incomplet ({sorted(battements)}).")
+
     now = int(time.time())
     manifeste = {
+        "battements": battements,
         "schéma": SCHEMA,
         "instance": "b",
         "service": "veilleur",

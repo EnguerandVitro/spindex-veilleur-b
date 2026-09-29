@@ -44,6 +44,20 @@ import sys
 
 MANIFESTE = "MANIFESTE.json"
 SIGNATURE = "SIGNATURE.json"
+
+# Les tâches du veilleur, ÉCRITES EN CLAIR : ce fichier voyage seul (sans le paquet `veilleur`). La parité
+# avec `veilleur.battement.TACHES` est vérifiée par le banc (KE#94), pas supposée.
+TACHES_INDEXEES = frozenset({"passe", "differentiel-quotidien", "differentiel-complet"})
+# À partir de ce `produit_le_ts` (signé), un lot SANS index des battements est REFUSÉ ; avant, il est accepté
+# et signalé (lots publiés par le code antérieur au 2026-09-28). 2026-09-29T06:00:00Z : postérieur à la
+# publication prévue du code qui indexe. Si la publication a lieu après, remonter cette date d'autant.
+INDEX_EXIGE_DEPUIS = 1790661600   # 2026-09-29T06:00:00Z
+# Le banc peut AVANCER l'exigence (jamais la reculer) : `SPINDEX_B_INDEX_EXIGE_DEPUIS=0` exige l'index de
+# tout lot. Une valeur plus tardive que la constante est ignorée — ce réglage ne peut que durcir.
+try:
+    INDEX_EXIGE_DEPUIS = min(INDEX_EXIGE_DEPUIS, int(os.environ.get("SPINDEX_B_INDEX_EXIGE_DEPUIS", INDEX_EXIGE_DEPUIS)))
+except ValueError:
+    pass
 DOMAINE = b"spindex-veilleur-b-lot/1\n"
 
 
@@ -168,7 +182,39 @@ def verifier(lot_dir, ancre):
             f"ARRÊT : {len(intrus)} fichier(s) présents dans le lot mais absents du manifeste : "
             f"{intrus[:5]}. Ils seraient ingérés sans avoir jamais été signés.")
 
-    return {"fichiers": len(fichiers), "signé_par": attendue,
+    # L'INDEX des battements (un par tâche) est signé avec le manifeste — mais signé ne veut pas dire
+    # cohérent : un signataire fautif pourrait annoncer « présent » un battement absent, ou l'inverse. On
+    # le RECOUPE avec la liste des fichiers épinglés : présent ⇔ épinglé, et même empreinte.
+    index = man.get("battements")
+    if index is None:
+        produit = man.get("produit_le_ts")
+        if not isinstance(produit, int) or produit >= INDEX_EXIGE_DEPUIS:
+            raise LotError(f"ARRÊT : lot produit le {man.get('produit_le')} SANS index des battements, alors "
+                           f"qu'il est exigé depuis {INDEX_EXIGE_DEPUIS} : on ne peut plus dire quelles tâches "
+                           f"ont battu, ni quand.")
+        etat_index = "absent (lot antérieur au 2026-09-29T06:00Z : aucun index à recouper)"
+    else:
+        if not isinstance(index, dict) or set(index) != TACHES_INDEXEES:
+            raise LotError(f"ARRÊT : index des battements — tâches {sorted(index) if isinstance(index, dict) else index}"
+                           f", attendu exactement {sorted(TACHES_INDEXEES)} (KE#111).")
+        hors_index = sorted(f for f in fichiers if re.fullmatch(r"battement-.+\.json", f)
+                            and f not in {e.get("fichier") for e in index.values()})
+        if hors_index:
+            raise LotError(f"ARRÊT : index des battements — {hors_index} épinglé(s) au manifeste mais absent(s) "
+                           f"de l'index : un battement publié hors index ne serait jamais recoupé.")
+        for tache, e in sorted(index.items()):
+            f = e.get("fichier")
+            if f != f"battement-{tache}.json":
+                raise LotError(f"ARRÊT : index des battements — « {tache} » pointe {f!r}.")
+            if bool(e.get("présent")) != (f in fichiers):
+                raise LotError(f"ARRÊT : index des battements — « {tache} » dit présent={e.get('présent')} mais "
+                               f"le fichier {'est' if f in fichiers else 'n est pas'} épinglé au manifeste.")
+            if e.get("présent") and e.get("sha256") != fichiers[f]:
+                raise LotError(f"ARRÊT : index des battements — « {tache} » : empreinte {e.get('sha256')} ≠ "
+                               f"celle du manifeste {fichiers[f]}.")
+        etat_index = f"recoupé ({sum(1 for e in index.values() if e.get('présent'))}/{len(index)} présents)"
+
+    return {"fichiers": len(fichiers), "signé_par": attendue, "index_battements": etat_index,
             "produit_le": man.get("produit_le"), "empreinte_sources": man.get("empreinte_sources"),
             "jugement": man.get("jugement"), "exécution": man.get("exécution")}
 

@@ -26,7 +26,7 @@ CLE="${2:?ARRET : fichier de cle de banc attendu}"
 SAUVE="$TRAVAIL/sauvegarde"
 export PYTHONDONTWRITEBYTECODE=1
 
-A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh outils/etat_partiel.sh outils/etat_sain.sh)
+A_SAUVER=(outils/juger.py outils/sceau.py outils/preparer.py outils/executer.sh outils/verifier_lot.py outils/conformite.py outils/banc_fournisseur.py outils/pousser.sh outils/branche.sh outils/etat_partiel.sh outils/etat_sain.sh outils/publier.py)
 
 empreinte_arbre() {
   ( cd "$RACINE" && for f in "${A_SAUVER[@]}"; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1 )
@@ -403,6 +403,83 @@ import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 s2 = s.replace("    if etat is not None:", "    if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 30 : le filet mesuré n est plus déclaré (silence retombe sur la période du cron)"
+casser filet "cadence" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        if d.get(\"filet_s\") is not None or d.get(\"filet_source\"):", "        if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 31 : le lot ne porte plus que le battement de la tâche courante"
+casser battements_par_tache "cadence" outils/publier.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        if nom in copies:", "        if nom in copies and nom == \"battement-passe.json\":")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 32 : le vérificateur ne recoupe plus l index des battements"
+casser index_battements "cadence" outils/verifier_lot.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    index = man.get(\"battements\")\n    if index is None:", "    index = None\n    if index is None:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 33 : publier.py ne signe plus l index des battements (le vérificateur doit le refuser)"
+casser index_publie "cadence" outils/publier.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        \"battements\": battements,", "")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 34 : un lot neuf SANS index est accepté"
+casser index_exige "cadence" outils/verifier_lot.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        if not isinstance(produit, int) or produit >= INDEX_EXIGE_DEPUIS:", "        if False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 35 : le cardinal de l index n est plus vérifié"
+casser index_cardinal "cadence" outils/verifier_lot.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if not isinstance(index, dict) or set(index) != TACHES_INDEXEES:", "if not isinstance(index, dict) or not index:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 36 : un battement épinglé hors index passe"
+casser index_sens_inverse "cadence" outils/verifier_lot.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        if hors_index:\n", "        if False:\n")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '

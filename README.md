@@ -55,6 +55,15 @@ qu'un témoin absent.
    2026-09-28 depuis la machine du keeper : passe VERTE, 286 appels, fenêtre ≈ 1 590 s. **Non vérifié :
    que le RPC officiel réponde depuis un runner GitHub** (le premier job le dira ; un refus y sera nommé).
 
+9. **La fraîcheur de `b` dépend d'un déclencheur EXTERNE** (depuis le 2026-09-28) : la machine de
+   surveillance lance `b` par `workflow_dispatch` toutes les 15 min, et une fois par jour pour le
+   différentiel quotidien. Si cette machine tombe, `b` ne tourne plus que sur le cron GitHub (filet), bridé :
+   127 à 471 min mesurés. La surveillance doit donc lire `période_attendue_s` pour la fraîcheur et
+   `silence_max_s` pour l'alerte de silence ; un `b` silencieux 9 h n'est pas en faute, un `b` qui bat
+   toutes les 15 min en lisant une tête figée l'est en 15 min (`retard_bloc_max`, nominal ;
+   `retard_bloc_max_filet` n'est publié qu'à part). Et le déclencheur est lui-même un point unique :
+   c'est la machine qu'il est censé recouper qui le porte.
+
 ---
 
 ## Ce que cette copie embarque
@@ -184,24 +193,30 @@ le contrat est postérieur à C-4 (`TAG_CLAIM()` / `TAG_DRAW()` = étiquettes de
 redéploiement du 2026-09-28 (`…165955Z`) passe les quatre preuves. `--a-blanc` vérifie sans écrire. Au premier job
 qui suit, `executer.sh` archive l'état restauré de l'ancien contrat et ré-amorce (jambe I du banc).
 
-## La cadence, et pourquoi ce n'est pas 5 minutes
+## La cadence : un déclencheur externe, et le cron GitHub comme FILET (mesuré)
 
-`*/15`. Le minimum de GitHub est 5 minutes, mais ses exécutions sont approximatives : un `*/5` ne
-serait pas « toutes les 5 minutes », ce serait « toutes les 5 à 25 minutes ».
+**Mesure, 2026-09-28 (API GitHub, dépôt `spindex-veilleur-b`)** : 29 exécutions planifiées `*/15` du
+2026-09-23T22:57Z au 2026-09-28T18:12Z, écarts de **127 à 471 min, médiane 238 min**. GitHub bride les
+crons des dépôts publics : `*/15` n'y veut pas dire « toutes les 15 minutes ». Dériver le silence admissible
+du cron déclaré publiait ≈ 1 081 s et la surveillance voyait `b` muette en permanence.
 
-Ce que `b` doit garantir n'est **pas** la règle des 5 minutes de publication d'une table — celle-là
-appartient à `a`, sous systemd, sur une machine que nous tenons. `b` garantit qu'un **silence** ou un
-**mensonge** de `a` se voie. L'échelle des choses qu'il doit voir est la semaine (`postWeek`), et les
-échéances du contrat sont à J+30 et J+90 : un quart d'heure est sans commune mesure. En prime, `*/15`
-donne trois fois plus de marge face aux retards de la plateforme et divise par trois la charge d'un
-veilleur qui n'a pas de nœud à lui.
+Depuis le 2026-09-28, `b` publie **deux bornes distinctes et nommées** par tâche (`health.json`) :
 
-> ⚠️ **Point non résolu, à trancher par le coordinateur.** Le `health.json` que `b` publie est écrit
-> par le paquet **scellé**, dont `battement.TACHES["passe"]["période_s"]` vaut 300 s en dur (la
-> cadence du timer systemd). La surveillance en dérive `silence_max_s ≈ 431 s` et déclarera donc `b`
-> **muet à chaque passage**. Détail et correction demandée : `DEMANDE-SURVEILLANCE.md`, point 3.
+| tâche | `période_attendue_s` (fraîcheur) | déclencheur | `silence_max_s` (admissible) |
+|---|---|---|---|
+| `passe` | 900 | `workflow_dispatch` toutes les 15 min par la machine de surveillance | ≥ 32 400 s : filet = cron GitHub, 471 min mesurés + marge → 9 h |
+| `differentiel-quotidien` | 86 400 | `workflow_dispatch` une fois par jour (04:37 UTC) — déclencheur externe SEUL, aucun filet | dérivé de la période (86 400 + 600 + durée) |
+| `differentiel-complet` | — | **non planifié sur `b`** | — |
 
----
+Le différentiel COMPLET relit toute la chaîne depuis le déploiement : 5 488 appels (18 à 27 min) par jour
+d'âge du contrat, au-delà des 36 min de l'étape « Veiller » dès le **2026-09-30**. Aucune cadence ne le
+tient sur `b` ; il reste à `a` (systemd, sans plafond) tant que la famille ne le reprend pas par segments.
+Le QUOTIDIEN, lui, relit un jour de chaîne plus une marge de 200 000 blocs : ≈ 7 500 appels, **25 à 37 min
+sur dRPC** — à la limite des 36 min ; à surveiller dès les premiers jours.
+
+Chaque lot publié porte le **dernier battement connu de CHAQUE tâche**, octet pour octet et avec son
+horodatage d'origine, indexé et signé dans le manifeste (`battements`) ; une tâche qui n'a jamais tourné y
+est DITE absente.
 
 ## Ce que le job publie, et pourquoi les deux
 
@@ -388,8 +403,8 @@ print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryp
 " > /tmp/cle-banc.hex
 
 # BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 11 situations, 44 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 30 cassures : chaque garde est-elle portante ?
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 12 situations, 55 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 37 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin

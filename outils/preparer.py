@@ -165,6 +165,45 @@ def profil_rpc(url_secrete, declare):
     return declare
 
 
+TACHES_B = {"passe": "PASSE", "differentiel-quotidien": "DIFFERENTIEL_QUOTIDIEN",
+            "differentiel-complet": "DIFFERENTIEL_COMPLET"}
+
+
+def planification_env(c):
+    """Les clés de planification du `.env`, tirées de `planification` de la configuration. SANS défaut :
+    une tâche absente, une valeur manquante, un filet sans sa mesure → ARRÊT qui nomme la clé.
+
+    Le filet déclaré doit correspondre à un cron RÉELLEMENT présent dans le workflow (le seul qu'on sache
+    lire) : un filet sans cron serait une borne sur un déclencheur qui n'existe pas."""
+    pl = c.get("planification")
+    if not isinstance(pl, dict) or set(pl) != set(TACHES_B):
+        raise PreparerError(f"ARRÊT : `planification` doit déclarer exactement {sorted(TACHES_B)} "
+                            f"(lu : {sorted(pl) if isinstance(pl, dict) else pl}).")
+    out = []
+    for t, cle in TACHES_B.items():
+        d = pl[t]
+        if d.get("non_planifiee"):
+            if not d.get("pourquoi"):
+                raise PreparerError(f"ARRÊT : « {t} » non planifiée sans `pourquoi` : ce silence doit se justifier.")
+            out.append((f"SPINDEX_VEILLEUR_PERIODE_{cle}_S", "non-planifiée"))
+            continue
+        for k in ("periode_s", "precision_s", "delai_aleatoire_s", "declencheur"):
+            if d.get(k) in (None, ""):
+                raise PreparerError(f"ARRÊT : `planification.{t}.{k}` absent. Rien n'est deviné.")
+        out += [(f"SPINDEX_VEILLEUR_PERIODE_{cle}_S", int(d["periode_s"])),
+                (f"SPINDEX_VEILLEUR_PRECISION_{cle}_S", int(d["precision_s"])),
+                (f"SPINDEX_VEILLEUR_DELAI_ALEATOIRE_{cle}_S", int(d["delai_aleatoire_s"])),
+                (f"SPINDEX_VEILLEUR_DECLENCHEUR_{cle}", d["declencheur"])]
+        if d.get("filet_s") is not None or d.get("filet_source"):
+            if not (d.get("filet_s") and d.get("filet_source")):
+                raise PreparerError(f"ARRÊT : `planification.{t}` : filet_s et filet_source vont ensemble.")
+            if t == "passe":
+                periode_du_cron()            # le filet existe : exactement un cron lisible dans le workflow
+            out += [(f"SPINDEX_VEILLEUR_FILET_{cle}_S", int(d["filet_s"])),
+                    (f"SPINDEX_VEILLEUR_FILET_{cle}_SOURCE", d["filet_source"])]
+    return out
+
+
 def preparer(config_path, etat_dir, reprise="incrémental"):
     with open(config_path, encoding="utf-8") as fh:
         c = json.load(fh)
@@ -221,22 +260,12 @@ def preparer(config_path, etat_dir, reprise="incrémental"):
         ("SPINDEX_VEILLEUR_BATTEMENT_DIR", os.path.join(etat_dir, "etat")),
         ("SPINDEX_VEILLEUR_INSTANCE", "b"),
         ("SPINDEX_VEILLEUR_REPRISE", reprise),
-        # Cadence de CETTE instance (le paquet scellé ne la porte plus : elle est propre à l'instance).
-        # La période n'est pas recopiée à la main : elle est LUE dans le cron du workflow, qui est
-        # l'autorité réelle de la planification de `b` (KE#130 — la référence vient de la source, pas
-        # du sujet). Un cron qu'on ne sait pas lire est un ARRÊT, jamais une valeur par défaut (KE#73).
+        # Cadence de CETTE instance, DÉCLARÉE dans la configuration (`planification`), tâche par tâche.
+        # Le cron du workflow n'en est PLUS l'autorité : GitHub le bride (mesuré : écarts de 127 à 471
+        # min pour `*/15`), c'est le FILET. La fraîcheur vient du déclencheur externe (workflow_dispatch
+        # par la surveillance) ; le silence admissible, du retard MESURÉ du filet (KE#130).
         ("SPINDEX_VEILLEUR_PLANIFICATEUR", "github-actions"),
-        ("SPINDEX_VEILLEUR_PERIODE_PASSE_S", periode_du_cron()),
-        # GitHub retarde et saute des exécutions : la précision annoncée est large, et assumée comme un
-        # CHOIX (elle n'est pas mesurée ; la surveillance recoupe la déclaration avec les battements).
-        ("SPINDEX_VEILLEUR_PRECISION_PASSE_S", 60),
-        ("SPINDEX_VEILLEUR_DELAI_ALEATOIRE_PASSE_S", 0),
-        # Les deux différentiels ne sont PAS planifiés ici (workflow_dispatch seulement) : ils tournent
-        # sur `a`. « non-planifiée » le DÉCLARE ; s'en servir pour une tâche réellement planifiée
-        # reviendrait à acheter son silence.
-        ("SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_QUOTIDIEN_S", "non-planifiée"),
-        ("SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S", "non-planifiée"),
-        ("SPINDEX_PUBLISH_DEADLINE_S", int(c.get("publish_deadline_s") or 300)),
+    ] + planification_env(c) + [        ("SPINDEX_PUBLISH_DEADLINE_S", int(c.get("publish_deadline_s") or 300)),
         ("SPINDEX_WINDOW_ALERT_S", int(c.get("window_alert_s") or 720)),
         ("SPINDEX_WINDOW_NEED_S", int(c.get("window_need_s") or 480)),
         ("SPINDEX_MULTICALL_BATCH", int(c.get("multicall_batch") or 4000)),
