@@ -213,6 +213,16 @@ def verifier(lot_dir, ancre):
                 raise LotError(f"ARRÊT : index des battements — « {tache} » : empreinte {e.get('sha256')} ≠ "
                                f"celle du manifeste {fichiers[f]}.")
         etat_index = f"recoupé ({sum(1 for e in index.values() if e.get('présent'))}/{len(index)} présents)"
+        # Un jugement VERT sur une tâche dont le battement (signé, indexé) dit `partiel` est une contradiction
+        # du signataire : BATTEMENT.md v1.3 interdit tout vert sans couverture complète (KE#111).
+        jug = man.get("jugement") or {}
+        t = jug.get("tache")
+        if jug.get("verdict") == "VERT" and t in index and index[t].get("présent"):
+            with open(os.path.join(lot_dir, f"battement-{t}.json"), encoding="utf-8") as fh:
+                bat = json.load(fh)
+            if bat.get("resultat") == "partiel":
+                raise LotError(f"ARRÊT : jugement VERT pour « {t} » alors que son battement indexé dit `partiel` "
+                               f"(code {bat.get('code')}) : un vert sans couverture complète est une contradiction.")
 
     return {"fichiers": len(fichiers), "signé_par": attendue, "index_battements": etat_index,
             "produit_le": man.get("produit_le"), "empreinte_sources": man.get("empreinte_sources"),
