@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1790671684,
+ "ts": 1790671818,
  "empreinte": "e07912f2f91441ef6f0c3197e1f35f0502812938b5ad3b8564b654a7daa527fa",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -47,14 +47,22 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_QUOTIDIEN_S / SPINDEX_VEILLEUR_PRECISION_DIFFERENTIEL_QUOTIDIEN_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_DIFFERENTIEL_QUOTIDIEN_S dans le .env de l'instance",
    "pire_exécution_s": 2118,
-   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 130.105 s sur 1 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 130.105 s sur 2 exécution(s))",
    "silence_max_s": 89118,
    "retard_bloc_max": 910536,
    "retard_bloc_max_filet": null,
    "période_attendue_s": 86400,
    "déclencheur": "workflow_dispatch une fois par jour a 04:37 UTC par la machine de surveillance ; declencheur externe SEUL, aucun filet",
    "budget_s": 1740,
-   "couverture": null,
+   "couverture": {
+    "bloc_debut": 125796406,
+    "bloc_fin_cible": 126109570,
+    "bloc_fin_verifie": 126109570,
+    "segments_verifies": 16,
+    "segments_total": 16,
+    "complet": true,
+    "motif_partiel": null
+   },
    "silence_max_source": "dérivé de la période déclarée",
    "formules": {
     "silence_max_s": "période + précision + délai_aléatoire + pire (+ une période par dépassement de la période)",
