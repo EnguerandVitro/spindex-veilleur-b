@@ -25,8 +25,9 @@ La reconstruction complète depuis zéro reste la RÉFÉRENCE
 ---------------------------------------------------------
 Le mode `complet` ne lit aucun cache : c'est ce que fait le vérificateur public, c'est la garantie
 « reproductible par n'importe qui ». Le mode `incrémental` doit rendre EXACTEMENT les mêmes journaux, et
-`differentiel()` le vérifie (empreinte canonique égale, cardinal non nul exigé — deux listes vides
-sont égales et ne prouvent rien, KE#121).
+`segments.verifier()` le vérifie, segment par segment, contre une relecture de la chaîne (empreinte
+canonique égale, cardinal non nul exigé sur la couverture — deux listes vides sont égales et ne prouvent
+rien, KE#121).
 
 Écritures (KE#112)
 ------------------
@@ -198,8 +199,10 @@ class Magasin:
     def reprises(self):
         """Reprises FORCÉES (divergence, cache rejeté) inscrites au curseur : `[{génération, bloc}]`.
 
-        Un segment re-figé après une reprise forcée doit être revérifié par le différentiel quotidien même
-        s'il est ANTÉRIEUR à son point `vérifié_jusqu_à` : c'est ce registre qui le lui dit.
+        REGISTRE, plus garde : depuis le 2026-09-29, le différentiel segmenté (`segments.py`) ne le lit plus. Il
+        voit une plage re-figée par son CONTENU (contrôle (i) : empreinte du cache ≠ empreinte vérifiée), ce qui
+        couvre aussi un cache rejeté puis reconstruit, que ce registre ne voyait pas. Il reste inscrit au
+        curseur pour l'examen humain d'une divergence.
         """
         try:
             with open(self.path, "r", encoding="utf-8") as fh:
@@ -340,11 +343,17 @@ class LecteurJournaux:
 
     # ------------------------------------------------------------------ lecture
 
-    def lire(self, head, fin_bn, fin_hash, topics=None, ecrire=True):
+    def lire(self, head, fin_bn, fin_hash, topics=None, ecrire=True, echeance=None, lire_queue=True):
         """Rend (journaux ≤ finalized, journaux de la queue ]finalized, tête], rapport).
 
         `head`, `fin_bn`, `fin_hash` sont LUS SUR LA CHAÎNE par l'appelant pendant la passe : ce sont
         eux, et non le cache, qui bornent la couverture (KE#130).
+
+        `echeance` / `lire_queue` (mode incrémental, différentiel segmenté seulement, 2026-09-29) : le figeage
+        s'arrête PROPREMENT entre deux pas une fois l'échéance passée (chaque pas est déjà persisté) — le
+        rapport le DIT (`figeage_interrompu`) et la couverture n'est alors exigée que jusqu'au dernier bloc
+        figé ; la queue non figée n'est pas lue si l'appelant n'en a pas l'usage. La passe n'utilise ni l'un
+        ni l'autre : son comportement est inchangé.
         """
         dep = self.identite["deploy_block"]
         if fin_bn > head:
@@ -411,10 +420,14 @@ class LecteurJournaux:
             neuf = []
             n_segments_ecrits = 0
             cede = not ecrire
+            interrompu = None
             debut = reprise
             span = getattr(self.client, "max_log_span", None)
             pas = min(PAS_FIGEAGE, PAS_FIGEAGE_APPELS * span) if span else PAS_FIGEAGE
             while debut <= fin_eff:
+                if echeance is not None and time.time() > echeance:
+                    interrompu = debut - 1
+                    break
                 fin_seg = min(fin_eff, debut + pas - 1)
                 lgs, c = self._get(debut, fin_seg)
                 self._controler(lgs, debut, fin_seg)
@@ -440,12 +453,20 @@ class LecteurJournaux:
                     else:
                         cede = True
                 debut = fin_seg + 1
-            queue, c2 = self._get(fin_eff + 1, head)
-            _verifier_couverture(couv + c2, dep, head)
+            if interrompu is not None or not lire_queue:
+                # couverture exigée jusqu'au dernier bloc figé (lu), jamais au-delà ; la queue n'est pas lue
+                borne = interrompu if interrompu is not None else fin_eff
+                queue, c2 = [], []
+                if borne >= dep:
+                    _verifier_couverture(couv, dep, borne)
+            else:
+                queue, c2 = self._get(fin_eff + 1, head)
+                _verifier_couverture(couv + c2, dep, head)
             final = cache + neuf
             ecriture = {k: v for k, v in ecriture.items() if k not in ("retenus",)}
             ecriture["segments_écrits_cette_passe"] = n_segments_ecrits
-            rapport.update({"reprise_depuis": reprise, "cache_blocs": reprise - dep,
+            rapport.update({"figeage_interrompu": interrompu, "queue_lue": interrompu is None and lire_queue,
+                            "reprise_depuis": reprise, "cache_blocs": reprise - dep,
                             "cache_journaux": len(cache), "neuf_figé_blocs": max(0, fin_eff - reprise + 1),
                             "vérifications_de_hash": verifs,
                             "divergence": divergence, "cache_rejeté": probleme, "écriture": ecriture})
@@ -486,125 +507,6 @@ class LecteurJournaux:
                 f"cache figé jusqu'au bloc {segments[-1][0]['à']}, NON revérifié contre la chaîne")
 
 
-def differentiel(client, settings, head, fin_bn, fin_hash):
-    """Contrôle DIFFÉRENTIEL : incrémental == complet, sur la MÊME borne lue sur la chaîne.
-
-    Le mode incrémental lit (et met à jour) le cache ; le mode complet relit tout depuis le bloc de
-    déploiement. Témoin positif exigé : un cardinal nul des deux côtés est un ÉCHEC, pas une égalité.
-    """
-    inc = LecteurJournaux(client, settings, mode="incrémental")
-    com = LecteurJournaux(client, settings, mode="complet")
-    fi, qi, ri = inc.lire(head, fin_bn, fin_hash)
-    fc, qc, rc = com.lire(head, fin_bn, fin_hash)
-    ei, ni = empreinte_journaux(fi + qi)
-    ec, nc = empreinte_journaux(fc + qc)
-    egal = (ei == ec) and (ni == nc)
-    res = {"borne": {"tête": head, "finalized": fin_bn},
-           "incrémental": {"empreinte": ei, "journaux": ni, "appels_rpc": ri["appels_rpc"],
-                           "reprise_depuis": ri["reprise_depuis"], "divergence": ri["divergence"]},
-           "complet": {"empreinte": ec, "journaux": nc, "appels_rpc": rc["appels_rpc"]},
-           "égal": egal}
-    if nc == 0:
-        res["état"] = "VACUE"
-        res["motif"] = ("ZÉRO journal des deux côtés : l'égalité de deux listes vides ne prouve rien "
-                        "(KE#121). Contrôle NON concluant.")
-    elif not egal:
-        res["état"] = "DIVERGENT"
-        a = {(x["blockNumber"], x["logIndex"]): x for x in map(_canon, fi + qi)}
-        b = {(x["blockNumber"], x["logIndex"]): x for x in map(_canon, fc + qc)}
-        res["détail"] = {
-            "absents_de_l_incrémental": sorted(set(b) - set(a))[:10],
-            "en_trop_dans_l_incrémental": sorted(set(a) - set(b))[:10],
-            "contenus_différents": sorted(k for k in set(a) & set(b) if a[k] != b[k])[:10]}
-        res["motif"] = ("l'incrémental NE rend PAS les journaux de la reconstruction complète : le cache "
-                        "est faux. P0 — ne plus s'y fier, le supprimer et repartir de zéro.")
-    else:
-        res["état"] = "IDENTIQUE"
-        _, segs, _ = inc.magasin.charger()
-        if segs:
-            EtatDifferentiel(settings.state_dir).avancer(segs[-1][0]["à"], inc.magasin.reprises(),
-                                                        "complet")
-    return res
-
-
-class EtatDifferentiel:
-    """`etat/differentiel.json` : jusqu'où le cache figé a été revérifié contre la chaîne, et quelles
-    reprises forcées ont déjà été prises en compte. Écrit atomiquement, SEULEMENT après un IDENTIQUE."""
-
-    def __init__(self, state_dir):
-        self.path = os.path.join(state_dir, "differentiel.json")
-        self.data = {}
-        if os.path.exists(self.path):
-            with open(self.path, "r", encoding="utf-8") as fh:
-                self.data = json.load(fh)
-
-    @property
-    def verifie_jusqu_a(self):
-        return self.data.get("vérifié_jusqu_à")
-
-    @property
-    def generation_vue(self):
-        return self.data.get("génération_vue", 0)
-
-    def avancer(self, bloc, reprises, portee):
-        self.data = {"vérifié_jusqu_à": int(bloc),
-                     "génération_vue": max([self.generation_vue] + [r["génération"] for r in reprises]),
-                     "ts": int(time.time()), "portée": portee}
-        _ecrire_atomique(self.path, self.data)
-
-
-# Recouvrement du différentiel quotidien : UN segment de rattrapage (le plus grand segment non compacté).
-MARGE_QUOTIDIENNE = PAS_FIGEAGE
-
-
-def differentiel_quotidien(client, settings, head, fin_bn, fin_hash, marge=None):
-    """Différentiel QUOTIDIEN (arbitrage Q3) : seuls les blocs figés DEPUIS le précédent différentiel
-    réussi, plus une marge de recouvrement d'un segment, plus toute plage re-figée par une reprise
-    forcée depuis. Coût borné par le volume du jour, pas par l'âge du contrat.
-
-    La plage vérifiée commence au point vérifié, JAMAIS à « aujourd'hui − 1 jour » : un jour sans
-    différentiel (machine arrêtée, timer manqué) ne doit laisser aucun segment figé hors vérification.
-    """
-    marge = MARGE_QUOTIDIENNE if marge is None else marge
-    inc = LecteurJournaux(client, settings, mode="incrémental")
-    inc.lire(head, fin_bn, fin_hash)                       # cache à jour, point de reprise vérifié
-    _, segments, probleme = inc.magasin.charger()
-    if not segments:
-        raise RepriseError("ARRÊT : aucun cache figé — rien à vérifier. Amorcer d'abord (README).")
-    dep = inc.identite["deploy_block"]
-    fin_fige = segments[-1][0]["à"]
-    etat = EtatDifferentiel(settings.state_dir)
-    deja = etat.verifie_jusqu_a
-    debut = dep if deja is None else max(dep, deja + 1 - marge)
-    reprises = inc.magasin.reprises()
-    nouvelles = [r for r in reprises if r["génération"] > etat.generation_vue]
-    if nouvelles:
-        debut = min(debut, max(dep, min(r["bloc"] for r in nouvelles)))
-    debut = min(debut, fin_fige)
-    cache = [lg for _, lgs, _ in segments for lg in lgs if debut <= _bn(lg) <= fin_fige]
-    a0 = client.stats.get("calls", 0)
-    ref, couv = client.get_logs_chunked(settings.rewards, None, debut, fin_fige)
-    _verifier_couverture(couv, debut, fin_fige)
-    ei, ni = empreinte_journaux(cache)
-    ec, nc = empreinte_journaux(ref)
-    res = {"portée": "quotidienne", "plage": [debut, fin_fige], "blocs": fin_fige - debut + 1,
-           "précédent_vérifié_jusqu_à": deja, "reprises_forcées_prises_en_compte": len(nouvelles),
-           "journaux_comparés": nc, "appels_rpc": client.stats.get("calls", 0) - a0,
-           "cache": {"empreinte": ei, "journaux": ni}, "chaîne": {"empreinte": ec, "journaux": nc}}
-    if (ei, ni) != (ec, nc):
-        a = {(x["blockNumber"], x["logIndex"]): x for x in map(_canon, cache)}
-        b = {(x["blockNumber"], x["logIndex"]): x for x in map(_canon, ref)}
-        res.update({"état": "DIVERGENT", "détail": {
-            "absents_du_cache": sorted(set(b) - set(a))[:10],
-            "en_trop_dans_le_cache": sorted(set(a) - set(b))[:10],
-            "contenus_différents": sorted(k for k in set(a) & set(b) if a[k] != b[k])[:10]},
-            "motif": "le cache figé NE rend PAS les journaux de la chaîne sur cette plage : P0. Le point "
-                     "vérifié n'avance PAS ; supprimer le cache et repartir de zéro."})
-        return res
-    res["état"] = "IDENTIQUE"
-    if nc == 0:
-        # Une journée sans journal est possible : l'égalité est vraie mais n'a rien comparé. On le DIT ;
-        # le différentiel COMPLET hebdomadaire, lui, exige un cardinal non nul (VACUE sinon).
-        res["vacuité"] = "aucun journal sur la plage : égalité non exercée (KE#121)"
-    etat.avancer(fin_fige, reprises, "quotidienne")
-    return res
+# Les DIFFÉRENTIELS (incrémental confronté à une relecture de la chaîne) vivent dans `segments.py` depuis le
+# 2026-09-29 : relus d'un seul tenant, ils ne tenaient plus dans un job de 36 min passé ~2 jours d'âge du
+# contrat chez dRPC. Ils y sont REPRENABLES par segments à bornes fixes, avec un point de reprise vérifié.

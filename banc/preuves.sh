@@ -22,6 +22,9 @@
 #                          (lot, état, battement, health, derniere-passe) ne le contient
 #   M  cadence/battements  health : période ATTENDUE 900 s et silence tiré du filet MESURÉ (≥ 32 400 s) ;
 #                          le lot porte le DERNIER battement de CHAQUE tâche, octets et horodatage d origine
+#   N  différentiels       job TUÉ en plein différentiel après ≥ 2 points de reprise : le job suivant REPREND au
+#                          premier segment non vérifié et rend VERT, couverture EXACTE ; budget épuisé -> ROUGE
+#                          (jamais VERT sans couverture complète), lot publié quand même
 #   I  redéploiement       la configuration désigne un autre contrat que l état restauré : état ARCHIVÉ,
 #                          ré-amorçage (refusé ici, le contrat désigné étant faux)          attendu ARRET (2)
 #
@@ -41,7 +44,7 @@ RPC_VRAI="${BANC_RPC:-https://rpc.testnet.chain.robinhood.com}"
 RPC_AUTRE="${BANC_RPC_AUTRE:-https://rpc.mainnet.chain.robinhood.com}"
 # Filtre de jambes : les cassures synthétiques ne rejouent que la (ou les) jambe(s) qu elles visent,
 # pour que « rouge sur le test NOMMÉ » veuille dire quelque chose. Par défaut : toutes.
-JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit fuite cadence}"
+JAMBES="${BANC_JAMBES:-temoin chaine controle sceau secret autonome conformite profil redeploiement publication cache_contredit fuite cadence differentiels}"
 # Racine du PROJET (arbre source + frozen.py) : les contrôles de conformité à la SOURCE en ont besoin.
 PROJET="${BANC_PROJET:-$(dirname "$RACINE")}"
 voulue() { [[ " $JAMBES " == *" $1 "* ]]; }
@@ -479,14 +482,20 @@ rm -f "$K/etat/amorcage.json" "$K/etat/battement-passe.json"
 python3 -B - "$K/etat/journaux" <<'PYEOF'
 import hashlib, json, os, sys
 d = sys.argv[1]; cur = json.load(open(os.path.join(d, "curseur.json"), encoding="utf-8"))
-m = cur["segments"][-1]; p = os.path.join(d, m["fichier"])
-seg = json.load(open(p, encoding="utf-8"))
-assert seg["journaux"], "segment sans journal : rien à falsifier"
+# le DERNIER segment figé qui PORTE un journal : depuis que la chaîne dépasse 200 000 blocs, le cache en a
+# plusieurs, et le dernier peut être vide (constaté le 2026-09-29 : la jambe falsifiait un segment vide, son
+# assertion échouait, et le job tournait sur un cache INTACT — rouge pour une raison hors sujet, KE#142)
+for m in reversed(cur["segments"]):
+    p = os.path.join(d, m["fichier"]); seg = json.load(open(p, encoding="utf-8"))
+    if seg["journaux"]:
+        break
+assert seg["journaux"], "aucun segment figé ne porte de journal : rien à falsifier"
 seg["journaux"] = seg["journaux"][:-1]                      # un journal RETIRÉ du cache
 json.dump(seg, open(p, "w", encoding="utf-8"), ensure_ascii=False)
 m["n"] = len(seg["journaux"]); m["sha256"] = hashlib.sha256(open(p, "rb").read()).hexdigest()   # sha RECALCULÉ
 json.dump(cur, open(os.path.join(d, "curseur.json"), "w", encoding="utf-8"), ensure_ascii=False)
 PYEOF
+[ $? = 0 ] || { echo "ARRET : la falsification du cache (jambe K) a échoué : la jambe ne mesurerait rien" >&2; exit 2; }
 code=0
 B_ETAT="$K" B_LOT="$K/lot" B_TACHE=passe B_CONFIG="$CONFIG_BANC" SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" \
   bash "$RACINE/outils/executer.sh" > "$K.log" 2>&1 || code=$?
@@ -501,6 +510,55 @@ if [ "$code" = 3 ]; then
   echo "  [cache_contredit] OK — l état partiel n a plus rien à republier"; VERTS=$((VERTS + 1))
 else
   echo "  [cache_contredit] ÉCHEC — etat_partiel rend $code (attendu 3)"; ECHECS+=("cache_contredit: republiable"); ROUGES=$((ROUGES + 1))
+fi
+# K2 — la TÂCHE (différentiel planifié), pas seulement l amorçage : un cache contredit est écarté de `etat/`
+K2="$TRAVAIL/cache_contredit_tache"; rm -rf "$K2" && mkdir -p "$K2"
+cp -r "$TRAVAIL/reference/etat" "$K2/etat"
+rm -f "$K2/etat/differentiel-quotidien.json" "$K2"/etat/*.verrou
+python3 -B - "$K2/etat/journaux" <<'PYEOF'
+import hashlib, json, os, sys
+d = sys.argv[1]; cur = json.load(open(os.path.join(d, "curseur.json"), encoding="utf-8"))
+for m in cur["segments"]:                                   # le PREMIER segment qui porte un journal
+    p = os.path.join(d, m["fichier"]); seg = json.load(open(p, encoding="utf-8"))
+    if seg["journaux"]:
+        break
+assert seg["journaux"], "aucun journal figé : rien à falsifier"
+seg["journaux"] = seg["journaux"][:-1]
+json.dump(seg, open(p, "w", encoding="utf-8"), ensure_ascii=False)
+m["n"] = len(seg["journaux"]); m["sha256"] = hashlib.sha256(open(p, "rb").read()).hexdigest()
+json.dump(cur, open(os.path.join(d, "curseur.json"), "w", encoding="utf-8"), ensure_ascii=False)
+PYEOF
+[ $? = 0 ] || { echo "ARRET : la falsification du cache (jambe K2) a échoué : la jambe ne mesurerait rien" >&2; exit 2; }
+rm -rf "$TRAVAIL/k3-source" && cp -r "$K2/etat" "$TRAVAIL/k3-source"      # le MÊME état falsifié, pour K3
+code=0
+B_ETAT="$K2" B_LOT="$K2/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" SPINDEX_B_RPC_URL="$RPC_VRAI" \
+SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$K2.log" 2>&1 || code=$?
+if [ "$code" = 1 ] && [ ! -d "$K2/etat/journaux" ] && ls -d "$K2"/journaux-rejete-* >/dev/null 2>&1 \
+   && [ -f "$K2/lot/SIGNATURE.json" ] && python3 -B -c 'import json,sys
+j=json.load(open(sys.argv[1],encoding="utf-8"));sys.exit(0 if j["verdict"]=="ROUGE" and j["battement"]["code"]=="differentiel_divergent" else 1)' "$K2/lot/JUGEMENT.json"; then
+  echo "  [cache_contredit] OK — différentiel quotidien DIVERGENT : ROUGE, lot publié, journaux écartés hors de etat/"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — tâche DIVERGENTE mal traitée (code $code, voir $K2.log)"; ECHECS+=("cache_contredit: tâche"); ROUGES=$((ROUGES + 1))
+fi
+# K3 — le cache contredit ne PEUT PAS être écarté (mv et rm refusés sur etat/journaux) : il reste en place, le
+# marqueur CACHE_CONTREDIT est posé et AUCUNE publication de etat/ n'a lieu (KE#151) — jamais « SUPPRIMÉ » affiché
+K3="$TRAVAIL/cache_contredit_bloque"; rm -rf "$K3" && mkdir -p "$K3/shim"
+cp -r "$TRAVAIL/k3-source" "$K3/etat"
+for outil in mv rm; do
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */etat/journaux) echo "shim : %s refusé sur $a" >&2; exit 1;; esac; done\nexec %s "$@"\n' \
+    "$outil" "$(command -v "$outil")" > "$K3/shim/$outil"
+  chmod +x "$K3/shim/$outil"
+done
+code=0
+PATH="$K3/shim:$PATH" B_ETAT="$K3" B_LOT="$K3/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" \
+SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" bash "$RACINE/outils/executer.sh" > "$K3.log" 2>&1 || code=$?
+ep=0; bash "$RACINE/outils/etat_partiel.sh" "$K3" "$K3/pub" > "$K3.ep.log" 2>&1 || ep=$?
+if [ -f "$K3/CACHE_CONTREDIT" ] && [ -d "$K3/etat/journaux" ] && [ "$ep" = 1 ] && [ ! -d "$K3/pub/etat/journaux" ] \
+   && grep -q "IMPOSSIBLE à écarter" "$K3.log" && ! grep -q "SUPPRIMÉ" "$K3.log"; then
+  echo "  [cache_contredit] OK — cache contredit non écartable : CACHE_CONTREDIT posé, publication de etat/ REFUSÉE (1)"; VERTS=$((VERTS + 1))
+else
+  echo "  [cache_contredit] ÉCHEC — cache contredit non écartable mal traité (code $code, etat_partiel $ep, voir $K3.log)"
+  ECHECS+=("cache_contredit: non écartable"); ROUGES=$((ROUGES + 1))
 fi
 fi
 
@@ -530,11 +588,15 @@ t = json.load(open(sys.argv[1], encoding="utf-8"))["taches"]
 p, q, c = t["passe"], t["differentiel-quotidien"], t["differentiel-complet"]
 ok = (p["période_attendue_s"] == 900 and p["silence_max_s"] >= 32400 and "filet MESURÉ" in p["silence_max_source"]
       and q["planifiée"] and q["période_s"] == 86400 and "SEUL" in (q.get("déclencheur") or "")
-      and c["planifiée"] is False)
-print(p["période_attendue_s"], p["silence_max_s"], q["période_s"], c["planifiée"])
+      and c["planifiée"] is True and c["période_attendue_s"] == 21600 and c["tour_s"] == 604800
+      and q["budget_s"] == c["budget_s"] == 1740 and p["budget_s"] is None
+      # le budget BORNE le pire cas publié (sinon il croîtrait avec l'âge du contrat) : silence fini et dérivé
+      and c["silence_max_s"] is not None and c["silence_max_s"] <= 21600 + 600 + 1740 + 378 + 21600)
+print(p["période_attendue_s"], p["silence_max_s"], q["période_s"], c["planifiée"], c.get("période_attendue_s"),
+      c.get("tour_s"), c.get("budget_s"), c.get("silence_max_s"))
 sys.exit(0 if ok else 1)
 PYEOF
-then echo "  [cadence] OK — passe 900 s attendue / silence ≥ 32 400 s (filet mesuré) ; quotidien 86 400 s externe ; complet non planifié"; VERTS=$((VERTS + 1))
+then echo "  [cadence] OK — passe 900 s / silence ≥ 32 400 s (filet mesuré) ; quotidien 86 400 s ; complet 21 600 s, tour 604 800 s, budget 1 740 s"; VERTS=$((VERTS + 1))
 else echo "  [cadence] ÉCHEC — bornes publiées incorrectes"; ECHECS+=("cadence: bornes"); ROUGES=$((ROUGES + 1)); fi
 # le lot publié PAR LE JOB (executer.sh -> publier.py), avec l index EXIGÉ de tout lot : c est le
 # VÉRIFICATEUR qui doit dire si l index manque — indépendamment de tout contrôle du banc (KE#139)
@@ -584,6 +646,10 @@ elif mode == "present":
     m["battements"]["differentiel-complet"]["présent"] = True
 elif mode == "sans_index":
     del m["battements"]
+    # un lot ANTÉRIEUR au seuil de l'index, daté comme tel : le banc ne doit pas dépendre de l'heure à laquelle il
+    # tourne (constaté le 2026-09-29 après 06:00Z : le lot « antérieur » fabriqué à l'instant ne l'était plus)
+    m["produit_le_ts"] = 1790661600 - 3600
+    m["produit_le"] = "2026-09-29T05:00:00Z"
 elif mode == "cardinal":
     del m["battements"]["differentiel-complet"]
 else:                                         # un battement épinglé que l index ne cite pas
@@ -608,10 +674,136 @@ PYEOF
        && grep -qF "absent" "$M/verif-ancien.log"; then
       echo "  [cadence] OK — lot antérieur au seuil sans index : accepté et signalé"; VERTS=$((VERTS + 1))
     else echo "  [cadence] ÉCHEC — lot antérieur mal traité (voir $M/verif-ancien.log)"; ECHECS+=("cadence: antérieur"); ROUGES=$((ROUGES + 1)); fi
+    # jugement VERT alors que le battement indexé de la tâche jugée dit `partiel` (re-signé) : REFUSÉ, motif nommé
+    rm -rf "$M/lot-vert-partiel" && cp -r "$M/lot" "$M/lot-vert-partiel"
+    python3 -B - "$M/lot-vert-partiel" "$TRAVAIL/cadence/attest-b.hex" "$RACINE" <<'PYEOF'
+import hashlib, json, os, sys
+lot, cle, racine = sys.argv[1:4]
+sys.path.insert(0, racine)
+from veilleur.attest import AttestKey
+from veilleur.verdict import canonical
+m = json.load(open(os.path.join(lot, "MANIFESTE.json"), encoding="utf-8"))
+t = m["jugement"]["tache"]; f = f"battement-{t}.json"
+b = json.load(open(os.path.join(lot, f), encoding="utf-8"))
+b.update({"resultat": "partiel", "code": "differentiel_partiel",
+          "couverture": {"bloc_debut": 1, "bloc_fin_cible": 9, "bloc_fin_verifie": 4, "segments_verifies": 0,
+                         "segments_total": 1, "complet": False, "motif_partiel": "banc"}})
+open(os.path.join(lot, f), "w", encoding="utf-8").write(json.dumps(b, ensure_ascii=False))
+h = hashlib.sha256(open(os.path.join(lot, f), "rb").read()).hexdigest()
+m["fichiers"][f] = h; m["battements"][t]["sha256"] = h; m["jugement"]["verdict"] = "VERT"
+k = AttestKey.load(cle); p = canonical(m); d = b"spindex-veilleur-b-lot/1\n"
+s = json.load(open(os.path.join(lot, "SIGNATURE.json"), encoding="utf-8"))
+s["signature"] = k.sign(d + p).hex(); s["empreinte_manifeste_sha256"] = hashlib.sha256(p).hexdigest()
+json.dump(m, open(os.path.join(lot, "MANIFESTE.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, sort_keys=True)
+json.dump(s, open(os.path.join(lot, "SIGNATURE.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1, sort_keys=True)
+PYEOF
+    if ( cd "$M" && python3 -B "$RACINE/outils/verifier_lot.py" --lot lot-vert-partiel --clé-publique "$TRAVAIL/cadence/attest-b.pub" > "$M/verif-vert-partiel.log" 2>&1 ); then
+      echo "  [cadence] ÉCHEC — jugement VERT sur un battement partiel ACCEPTÉ"; ECHECS+=("cadence: vert partiel"); ROUGES=$((ROUGES + 1))
+    elif grep -q "contradiction" "$M/verif-vert-partiel.log"; then
+      echo "  [cadence] OK — jugement VERT sur un battement partiel : REFUSÉ (contradiction nommée)"; VERTS=$((VERTS + 1))
+    else echo "  [cadence] ÉCHEC — vert partiel refusé pour une autre raison : $(head -1 "$M/verif-vert-partiel.log")"; ECHECS+=("cadence: vert partiel motif"); ROUGES=$((ROUGES + 1)); fi
+    # budget au-delà de la borne (échéance dure > kill de l'étape moins la marge du lot) : ARRÊT nommant la clé
+    python3 -B -c 'import json,sys;c=json.load(open(sys.argv[1],encoding="utf-8"));c["budget_veiller_s"]=1741;json.dump(c,open(sys.argv[2],"w",encoding="utf-8"))' "$CONFIG_BANC" "$M/config-1741.json"
+    mkdir -p "$M/prep"
+    if SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" python3 -B "$RACINE/outils/preparer.py" \
+         --config "$M/config-1741.json" --etat "$M/prep" > "$M/prep.log" 2>&1; then
+      echo "  [cadence] ÉCHEC — budget 1 741 s accepté"; ECHECS+=("cadence: budget"); ROUGES=$((ROUGES + 1))
+    elif grep -q "budget_veiller_s" "$M/prep.log"; then
+      echo "  [cadence] OK — budget 1 741 s REFUSÉ, clé nommée (borne 2 160 − 120 − 300)"; VERTS=$((VERTS + 1))
+    else echo "  [cadence] ÉCHEC — budget refusé sans nommer la clé : $(tail -1 "$M/prep.log")"; ECHECS+=("cadence: budget motif"); ROUGES=$((ROUGES + 1)); fi
   else echo "  [cadence] ÉCHEC — lot à battements multiples non vérifiable"; ECHECS+=("cadence: signature"); ROUGES=$((ROUGES + 1)); fi
 else
   echo "  [cadence] ÉCHEC — battements par tâche absents ou rafraîchis (voir $M/publier.log)"; ECHECS+=("cadence: battements"); ROUGES=$((ROUGES + 1))
 fi
+fi
+if voulue differentiels; then
+echo
+echo "--- N : différentiels REPRENABLES — job TUÉ en plein différentiel, reprise exacte au job suivant ; budget épuisé -> ROUGE"
+etat_de_reference
+N="$TRAVAIL/diff"; rm -rf "$N" && mkdir -p "$N"
+cp -r "$TRAVAIL/reference/etat" "$N/etat"
+# aucun point de reprise hérité : le quotidien vérifie depuis le déploiement (sans adopter le tour de l amorçage)
+rm -f "$N/etat/differentiel-quotidien.json" "$N/etat/differentiel-complet.json" "$N"/etat/*.verrou
+PTS="$N/etat/differentiel-quotidien.json"
+points() { python3 -B -c 'import json,sys
+try: print(len(json.load(open(sys.argv[1],encoding="utf-8"))["points"]))
+except Exception: print(0)' "$PTS"; }
+B_ETAT="$N" B_LOT="$N/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" \
+SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" \
+  setsid bash "$RACINE/outils/executer.sh" > "$N/job1.log" 2>&1 &
+PID=$!
+# attente d une PROGRESSION positive, bornée, jamais d une absence (KE#131)
+for _ in $(seq 1 360); do [ "$(points)" -ge 2 ] && break; sleep 0.5; done
+kill -9 -- "-$PID" 2>/dev/null; wait "$PID" 2>/dev/null
+K="$(points)"
+if [ "$K" -ge 2 ] && ! grep -q "6/6 lot publié" "$N/job1.log"; then
+  echo "  [differentiels] OK — job 1 tué après $K point(s) de reprise durables"; VERTS=$((VERTS + 1))
+  FIN_K="$(python3 -B -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["points"][-1]["à"])' "$PTS")"
+  code=0
+  B_ETAT="$N" B_LOT="$N/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" \
+  SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" \
+    bash "$RACINE/outils/executer.sh" > "$N/job2.log" 2>&1 || code=$?
+  if [ "$code" = 0 ] && python3 -B - "$N/etat/derniere-differentiel-quotidien.json" "$N/etat/battement-differentiel-quotidien.json" "$FIN_K" <<'PYEOF'
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8")); b = json.load(open(sys.argv[2], encoding="utf-8"))
+fin_k = int(sys.argv[3]); c = b["couverture"]; seg = r["segments_cette_exécution"]
+e = b["couverture_estimation"]
+ok = (r["état"] == "IDENTIQUE" and b["resultat"] == "ok" and seg and seg[0]["de"] == fin_k + 1
+      and c["complet"] is True and c["bloc_fin_verifie"] == c["bloc_fin_cible"]
+      and c["segments_verifies"] == c["segments_total"] and e["journaux_couverts"] >= 1)
+print("reprise au bloc", seg[0]["de"] if seg else None, "après", fin_k, "; couverture", c["bloc_fin_verifie"], "/",
+      c["bloc_fin_cible"], "; journaux", e["journaux_couverts"])
+sys.exit(0 if ok else 1)
+PYEOF
+  then echo "  [differentiels] OK — job 2 REPREND au premier segment non vérifié, couverture EXACTE, VERT"; VERTS=$((VERTS + 1))
+  else echo "  [differentiels] ÉCHEC — reprise incorrecte (code $code, voir $N/job2.log)"; ECHECS+=("differentiels: reprise"); ROUGES=$((ROUGES + 1)); fi
+else
+  echo "  [differentiels] ÉCHEC — le job n a écrit que $K point(s) avant la borne d attente (voir $N/job1.log)"
+  ECHECS+=("differentiels: aucune progression"); ROUGES=$((ROUGES + 1))
+fi
+# budget épuisé dès le départ : rien vérifié -> ERREUR nommée, ROUGE, lot publié (jamais un vert muet)
+N0="$TRAVAIL/diff0"; rm -rf "$N0" && mkdir -p "$N0"
+cp -r "$TRAVAIL/reference/etat" "$N0/etat"
+rm -f "$N0/etat/differentiel-quotidien.json" "$N0/etat/differentiel-complet.json" "$N0"/etat/*.verrou
+code=0
+B_ETAT="$N0" B_LOT="$N0/lot" B_TACHE=differentiel-quotidien B_CONFIG="$CONFIG_BANC" B_BUDGET_S=0 \
+SPINDEX_B_RPC_URL="$RPC_VRAI" SPINDEX_B_ATTEST_KEY_HEX="$(cat "$CLE")" \
+  bash "$RACINE/outils/executer.sh" > "$N0.log" 2>&1 || code=$?
+if [ "$code" = 1 ] && [ -f "$N0/lot/SIGNATURE.json" ] && python3 -B - "$N0/lot/JUGEMENT.json" <<'PYEOF'
+import json, sys
+j = json.load(open(sys.argv[1], encoding="utf-8")); b = j["battement"]
+ok = (j["verdict"] == "ROUGE" and (b["resultat"], b["code"]) == ("partiel", "differentiel_sans_progression")
+      and b["couverture"]["segments_verifies"] == 0 and b["couverture"]["complet"] is False
+      and b["couverture_estimation"]["segments_restants"] > 0)
+sys.exit(0 if ok else 1)
+PYEOF
+then echo "  [differentiels] OK — budget épuisé : ROUGE differentiel_sans_progression, lot signé publié"; VERTS=$((VERTS + 1))
+else echo "  [differentiels] ÉCHEC — budget épuisé mal jugé (code $code, voir $N0.log)"; ECHECS+=("differentiels: budget"); ROUGES=$((ROUGES + 1)); fi
+# le JUGEMENT d un différentiel partiel : EN_COURS s il progresse (jamais VERT, jamais ROUGE), ROUGE s il ne résorbe
+# pas son retard. Battements fabriqués au format du paquet, empreinte du sceau : seule la jambe juger est exercée.
+NJ="$TRAVAIL/diff-juger"
+for cas in "differentiel_partiel EN_COURS 0" "differentiel_retard_non_resorbe ROUGE 1"; do
+  set -- $cas
+  rm -rf "$NJ" && mkdir -p "$NJ"
+  python3 -B - "$NJ/battement-differentiel-complet.json" "$1" "$RACINE/SCEAU.json" <<'PYEOF'
+import json, sys, time
+e = json.load(open(sys.argv[3], encoding="utf-8"))["empreinte_sources_attendue"]
+json.dump({"format": 1, "service": "veilleur", "instance": "b", "tache": "differentiel-complet", "ts": int(time.time()),
+           "passe": 2, "bloc": 1, "resultat": "partiel", "code": sys.argv[2], "detail": "PARTIEL : banc",
+           "couverture": {"bloc_debut": 1, "bloc_fin_cible": 9, "bloc_fin_verifie": 4, "segments_verifies": 0,
+                          "segments_total": 1, "complet": False, "motif_partiel": "banc"},
+           "empreinte": e, "rpc": {}, "fournisseurs": None}, open(sys.argv[1], "w", encoding="utf-8"))
+PYEOF
+  jc=0
+  python3 -B "$RACINE/outils/juger.py" --etat "$NJ" --tache differentiel-complet --sortie 0 --sceau "$RACINE/SCEAU.json" \
+    --precedent 1 --jugement "$NJ/J.json" > "$NJ.log" 2>&1 || jc=$?
+  v="$(python3 -B -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["verdict"])' "$NJ/J.json" 2>/dev/null)"
+  if [ "$v" = "$2" ] && [ "$jc" = "$3" ]; then
+    echo "  [differentiels] OK — jugement de « $1 » : $v (sortie $jc)"; VERTS=$((VERTS + 1))
+  else
+    echo "  [differentiels] ÉCHEC — jugement de « $1 » : $v (sortie $jc), attendu $2 ($3)"; ECHECS+=("differentiels: juger $1"); ROUGES=$((ROUGES + 1))
+  fi
+done
 fi
 echo
 # Assertion de COUVERTURE (KE#111) : un filtre de jambes mal écrit ne ferait rien tourner du tout et

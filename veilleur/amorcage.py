@@ -15,7 +15,9 @@ L'amorçage n'est DÉCLARÉ FAIT (`état: AMORCÉ`, sortie 0) que si les quatre 
      bon et que la lecture des journaux voit réellement le contrat (une adresse ou un filtre faux rendrait
      « zéro journal », indiscernable d'un contrat calme) ;
   C. le cache est figé jusqu'au `finalized` lu pendant l'amorçage, point de reprise vérifié par hash ;
-  D. le différentiel COMPLET rend IDENTIQUE, sur un cardinal non nul (B le garantit).
+  D. le différentiel COMPLET rend IDENTIQUE, sur un cardinal non nul (B le garantit). Depuis le 2026-09-29 il est
+     SEGMENTÉ (`segments.py`, tour complet poursuivi, jamais réinitialisé) : sous `--échéance-ts`, il s'arrête
+     proprement, l'amorçage rend `EN_COURS` (sortie 20) et la relance REPREND au premier segment non vérifié.
 
 Tant que `finalized` n'a pas dépassé le bloc de déploiement (~20 min après), rien n'est figeable :
 `état: EN_ATTENTE_DE_FINALITÉ`, sortie 20, à relancer. Tout autre défaut : `REFUS`, sortie 10, motifs nommés.
@@ -41,7 +43,7 @@ import os
 import time
 
 from .chainread import ChainReadError
-from .journaux import LecteurJournaux, _ecrire_atomique, differentiel
+from .journaux import LecteurJournaux, _ecrire_atomique
 
 REGISTRE = "amorcage.json"
 FORMAT_REGISTRE = 1
@@ -122,7 +124,7 @@ def garde_chaine(client, settings, exiger_amorcage):
     return {"chainId": lu, "configuré": configure, "amorçage": amorce}
 
 
-def amorcer(v, s, tx_hash):
+def amorcer(v, s, tx_hash, echeance=None, horloge=time.time):
     motifs = []
     rep = {"instance": getattr(s, "instance", None), "rewards": s.rewards, "bloc_déploiement": s.deploy_block,
            "preuves": {}}
@@ -160,21 +162,45 @@ def amorcer(v, s, tx_hash):
                                    f"rien n'est figeable, relancer dans ~20 min"]
         return rep
     lect = LecteurJournaux(v.client, s, mode="incrémental")
-    _, _, r = lect.lire(head, fin_bn, fin_hash)
+    # C est borné par la MÊME échéance que D : chaque pas figé est persisté, un figeage interrompu REPREND
+    # `echeance` est dans l'horloge de l'appelant (réelle en service) ; le lecteur de cache compte en temps réel
+    ech_reel = None if echeance is None else time.time() + (echeance - horloge())
+    _, _, r = lect.lire(head, fin_bn, fin_hash, echeance=ech_reel, lire_queue=False)
     _, segs, pb = lect.magasin.charger()
     fige = segs[-1][0]["à"] if segs else None
     rep["preuves"]["C_cache"] = {"figé_jusqu_à": fige, "finalized_lu": fin_bn, "divergence": r["divergence"],
-                                 "cache_rejeté": pb, "ok": fige == fin_bn and pb is None}
+                                 "cache_rejeté": pb, "figeage_interrompu": r.get("figeage_interrompu"),
+                                 "ok": fige == fin_bn and pb is None}
+    if r.get("figeage_interrompu") is not None and not motifs and pb is None:
+        rep["état"] = "EN_COURS"
+        rep["code"] = "cache_en_cours"
+        rep["motifs"] = [f"C : figeage arrêté à l'échéance au bloc {r['figeage_interrompu']} (finalized {fin_bn}). "
+                         f"Relancer : il REPREND au dernier segment figé."]
+        return rep
     if fige != fin_bn or pb:
         motifs.append(f"C : cache figé jusqu'à {fige}, finalized lu {fin_bn}, problème : {pb}")
 
-    # --- D. différentiel complet
-    d = differentiel(v.client, s, head, fin_bn, fin_hash)
-    rep["preuves"]["D_différentiel_complet"] = {"état": d["état"], "journaux": d["complet"]["journaux"],
-                                                "ok": d["état"] == "IDENTIQUE"}
-    if d["état"] != "IDENTIQUE":
-        motifs.append(f"D : différentiel complet {d['état']}")
+    # --- D. différentiel complet, SEGMENTÉ et reprenable
+    from .segments import verifier as verifier_segments
+    d = verifier_segments(v.client, s, head, fin_bn, fin_hash, "complète", echeance=echeance, etendre=True,
+                          horloge=horloge)
+    cv = d.get("couverture") or {}
+    rep["preuves"]["D_différentiel_complet"] = {
+        "état": d["état"], "journaux": (d.get("couverture_estimation") or {}).get("journaux_couverts"), "couverture": cv,
+        "invalidations": d.get("invalidations"), "ok": d["état"] == "IDENTIQUE"}
+    en_cours = False
+    if d["état"] == "PARTIEL" and not motifs:
+        en_cours = True                  # budget atteint (ou cache en retard) : ce n'est pas un refus
+    elif d["état"] != "IDENTIQUE":
+        motifs.append(f"D : différentiel complet {d['état']}" + (f" ({d.get('motif')})" if d.get("motif") else ""))
 
+    if en_cours:
+        rep["état"] = "EN_COURS"
+        rep["code"] = d.get("code")
+        rep["motifs"] = [f"D : différentiel complet PARTIEL — {cv.get('segments_verifies')} segments sur "
+                         f"{cv.get('segments_total')} ({d.get('motif')}). Relancer : il REPREND au premier "
+                         f"segment non vérifié."]
+        return rep
     rep["état"] = "AMORCÉ" if not motifs else "REFUS"
     rep["motifs"] = motifs
     if not motifs:

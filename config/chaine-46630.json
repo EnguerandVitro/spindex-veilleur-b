@@ -20,7 +20,8 @@
   "tables_base_url": "l'instance a vise un dossier LOCAL de la machine keeper, ce que b ne peut évidemment pas lire. b vise l'emplacement PUBLIÉ. C'est une différence VOULUE : elle rend b capable de constater qu'une table n'est pas publiée là où le public la cherche, ce que a ne peut pas voir.",
   "rpc_profil": "le secret SPINDEX_B_RPC_URL est chez dRPC (arbitrage coordinateur 2026-09-28 ; rapport veilleur §13 : 101 blocs par plage, refus en HTTP 400). outils/preparer.py REFUSE de démarrer si le domaine de l'URL secrète contredit ce profil, dans les deux sens.",
   "rpc_etat": "arbitrage coordinateur 2026-09-28 (option 2) : dRPC gratuit ne sert plus l'état par numéro de bloc (mesures/rpc-drpc-etat-2026-09-28.json de la famille veilleur). Les JOURNAUX restent sur le secret (dRPC), l'ÉTAT passe par le RPC officiel PUBLIC — c'est le fournisseur de a : l'indépendance de b porte sur les journaux, PAS sur l'état.",
-  "planification": "arbitrage coordinateur 2026-09-28 : la cadence de b vient de son DECLENCHEUR REEL (workflow_dispatch par la surveillance), pas du cron declare ; le silence admissible de la passe vient du retard MESURE du cron GitHub (filet). KE#130."
+  "planification": "arbitrage coordinateur 2026-09-28 : la cadence de b vient de son DECLENCHEUR REEL (workflow_dispatch par la surveillance), pas du cron declare ; le silence admissible de la passe vient du retard MESURE du cron GitHub (filet). KE#130. Differentiel COMPLET remis le 2026-09-29 : reprenable par segments (backend/veilleur/segments.py), un TOUR complet par semaine (tour_s 604 800) poursuivi sur autant d'executions de 29 min qu'il faut ; declenche toutes les 6 h. Mesure : ~48 segments (2,2 j de chaine a 5,08 blocs/s) par execution chez dRPC ; a 4 executions par jour un tour tient dans la semaine jusqu'a ~54 j d'age du contrat, au-dela la surveillance voit differentiel_retard_non_resorbe (tour en retard) : c'est le signal d'un plan dRPC payant.",
+  "budget_veiller_s": "échéance d'ARRÊT PROPRE des différentiels (et de la preuve D d'un amorçage), comptée depuis le début de l'étape « Veiller » (tuée à 36 min = 2 160 s). Échéance DURE = budget + 120 s = 1 860 s, posée sur le client RPC : le délai de chaque appel est réduit à ce qui reste et aucune relance ni attente ne la franchit ; restent ≈ 300 s pour le jugement, le lot et la publication. Mesure du 2026-09-29 : 200 appels et ≈ 36 s par segment de 20 200 blocs chez dRPC (backend/veilleur/mesures/segments-2026-09-29.json)."
  },
  "rpc_profil": "drpc",
  "rpc_etat": {
@@ -43,8 +44,12 @@
    "declencheur": "workflow_dispatch une fois par jour a 04:37 UTC par la machine de surveillance ; declencheur externe SEUL, aucun filet"
   },
   "differentiel-complet": {
-   "non_planifiee": true,
-   "pourquoi": "relit toute la chaine depuis le deploiement : 5 488 appels (18 a 27 min) par JOUR d age du contrat, au-dela des 36 min du job des le 2026-09-30 ; tenu par l instance a (systemd, sans plafond) tant que le differentiel complet n est pas repris par segments"
+   "periode_s": 21600,
+   "precision_s": 600,
+   "delai_aleatoire_s": 0,
+   "tour_s": 604800,
+   "declencheur": "workflow_dispatch toutes les 6 h par la machine de surveillance (declencheur A CREER cote exploitation) ; declencheur externe SEUL, aucun filet"
   }
- }
+ },
+ "budget_veiller_s": 1740
 }

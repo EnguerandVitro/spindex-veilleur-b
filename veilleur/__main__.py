@@ -8,9 +8,10 @@
     python3 -B -m veilleur passe --instance a|b [--battement-dir <dossier>] [--depuis-zéro]
                                                   # la passe PLANIFIÉE (timer 5 min) : surveillance + battement
     python3 -B -m veilleur différentiel --instance a|b --portée quotidienne|complète [--battement-dir <d>]
-                                                  # cache figé == chaîne (quotidien : volume du jour ;
-                                                  #                     complet : tout, hebdomadaire)
-    python3 -B -m veilleur amorcer --instance a|b --tx-deploiement 0x…
+                                        [--échéance-ts <epoch>]
+                                                  # cache figé == chaîne, REPRENABLE par segments
+                                                  # (quotidien : le neuf ; complet : tours depuis le déploiement)
+    python3 -B -m veilleur amorcer --instance a|b --tx-deploiement 0x… [--échéance-ts <epoch>]
                                                   # à faire DÈS le déploiement du contrat (README)
     python3 -B -m veilleur avant-postweek  --week <id> [--table <dossier|url>]
     python3 -B -m veilleur avant-opendraw  --week <id> [--table <dossier|url>]
@@ -81,10 +82,17 @@ def main(argv=None):
     p.add_argument("--instance", required=True, choices=("a", "b"))
     p.add_argument("--portée", default="complète", choices=("quotidienne", "complète"))
     p.add_argument("--battement-dir", default=None)
+    p.add_argument("--échéance-ts", dest="echeance_ts", type=int, default=None,
+                   help="horodatage Unix ABSOLU d'arrêt propre (job à durée bornée) : le différentiel s'arrête "
+                        "avant, publie « partiel, N segments sur M » et reprend à l'exécution suivante")
+    p.add_argument("--nouveau-tour", dest="nouveau_tour", action="store_true",
+                   help="portée complète, À LA MAIN : commencer un tour neuf même si le précédent n'est pas échu")
     p = sub.add_parser("amorcer")
     p.add_argument("--instance", required=True, choices=("a", "b"))
     p.add_argument("--tx-deploiement", required=True,
                    help="hash de la transaction de déploiement de SpindexRewards (public)")
+    p.add_argument("--échéance-ts", dest="echeance_ts", type=int, default=None,
+                   help="horodatage Unix ABSOLU d'arrêt propre de la preuve D (différentiel complet segmenté)")
     for nom in ("avant-postweek", "avant-opendraw"):
         p = sub.add_parser(nom)
         p.add_argument("--week", type=int, required=True)
@@ -215,10 +223,11 @@ def main(argv=None):
             from .amorcage import amorcer
             if s.instance and s.instance != a.instance:
                 raise ConfigError(f"ARRÊT : le .env déclare l'instance « {s.instance} », pas « {a.instance} ».")
-            rep = amorcer(v, s, a.tx_deploiement)
+            rep = amorcer(v, s, a.tx_deploiement, echeance=a.echeance_ts)
             print(json.dumps(rep, ensure_ascii=False, indent=1))
             print(f"\n=== {rep['état']} ===", file=sys.stderr)
-            return 0 if rep["état"] == "AMORCÉ" else 10
+            # 20 : à relancer (finalité pas encore atteinte, ou preuve D en cours — elle REPREND) ; 10 : refus.
+            return {"AMORCÉ": 0, "EN_ATTENTE_DE_FINALITÉ": 20, "EN_COURS": 20}.get(rep["état"], 10)
 
         if a.cmd == "compte-à-rebours":
             rep = v.surveillance()["compte_à_rebours"]
@@ -285,7 +294,7 @@ def code_de_sortie(rep):
     return 0
 
 
-def _travail(tache, v, s):
+def _travail(tache, v, s, echeance=None, nouveau_tour=False):
     """Le travail d'une tâche. Rend (rapport, bloc de tête lu, resultat, code, detail).
 
     Plus de code de sortie ici : il est dérivé du battement ÉCRIT (`_executer`), pour qu'aucun chemin ne
@@ -296,14 +305,31 @@ def _travail(tache, v, s):
         rep = v.surveillance()              # la garde de chaîne est sa PREMIÈRE lecture
         r, c, d = qualifier(rep)
         return rep, rep.get("bloc_tête"), r, c, d
-    from .journaux import differentiel, differentiel_quotidien
+    from . import segments
     garde = v.garde_chaine(exiger_amorcage=True)       # AVANT toute lecture du différentiel
     head, fin_bn, fin_hash, _ = v.chaine_passe()
-    fn = differentiel_quotidien if tache == "differentiel-quotidien" else differentiel
-    rep = fn(v.client, s, head, fin_bn, fin_hash)
+    pl = s.planification[tache]
+    rep = segments.verifier(v.client, s, head, fin_bn, fin_hash,
+                            "quotidienne" if tache == "differentiel-quotidien" else "complète",
+                            echeance=_echeance(echeance, pl.get("budget_s")),
+                            tour_s=pl.get("tour_s"), periode_s=pl.get("période_s"),
+                            tolerance_s=(pl.get("précision_s") or 0) + (pl.get("délai_aléatoire_s") or 0),
+                            nouveau_tour=nouveau_tour)
     rep["chaîne"] = garde
     r, c, d = qualifier_differentiel(rep)
     return rep, head, r, c, d
+
+
+_T0 = None
+
+
+def _echeance(echeance_ts, budget_s):
+    """Échéance EFFECTIVE : la plus proche de l'échéance absolue reçue (partagée avec l'amorçage du même job) et
+    du budget DÉCLARÉ de la tâche, compté depuis le début de l'exécution. Ni l'une ni l'autre : aucune limite."""
+    import time
+    bornes = [x for x in (echeance_ts, None if budget_s is None else (_T0 or time.time()) + budget_s)
+              if x is not None]
+    return min(bornes) if bornes else None
 
 
 def _executer(a, tache):
@@ -320,7 +346,10 @@ def _executer(a, tache):
     tete = deploiement = cadence = None
     plan = plani = None
     fournisseurs = None
+    couverture = estimation = None
     t0 = time.time()
+    global _T0
+    _T0 = t0
     try:
         s = _settings()
         deploiement = s.deploy_block
@@ -336,7 +365,10 @@ def _executer(a, tache):
         bat = Battement(a.battement_dir or s.battement_dir, a.instance, tache)
         v = _veilleur(s)
         try:
-            rep, bloc, resultat, code, detail = _travail(tache, v, s)
+            rep, bloc, resultat, code, detail = _travail(tache, v, s, getattr(a, "echeance_ts", None),
+                                                         getattr(a, "nouveau_tour", False))
+            couverture = rep.get("couverture") if tache != "passe" else None
+            estimation = rep.get("couverture_estimation") if tache != "passe" else None
         finally:
             rpc = dict(getattr(v.client, "stats", {}) or {})
             rpc["fournisseurs"] = fournisseurs
@@ -382,12 +414,16 @@ def _executer(a, tache):
                   "battement porte le motif.", file=sys.stderr)
         else:
             ecrire_health(bat.dossier, a.instance, tete=tete, deploiement=deploiement, cadence=cadence,
-                          planification=plan, planificateur=plani, fournisseurs=fournisseurs)
+                          planification=plan, planificateur=plani, fournisseurs=fournisseurs,
+                          # la couverture de CETTE exécution, même nulle (en erreur) : jamais celle d'une exécution
+                          # précédente présentée comme courante (contre-revue P2-2)
+                          couverture_courante={tache: couverture} if tache != "passe" else None)
     except Exception as e:  # noqa: BLE001
         print(f"ÉCHEC health.json : {type(e).__name__} : {e}", file=sys.stderr)
         resultat, code = "erreur", "health_non_ecrit"
         detail = f"durées / health.json non écrits : {type(e).__name__} : {e}"[:400]
-    doc = bat.ecrire(resultat, code, detail, bloc, rpc=rpc)
+    doc = bat.ecrire(resultat, code, detail, bloc, rpc=rpc, couverture=couverture,
+                     couverture_estimation=estimation)
     print(f"battement {tache} : passe {doc['passe']} {doc['resultat']} {doc['code'] or ''} "
           f"({time.strftime('%H:%M:%S')})", file=sys.stderr)
     return sortie_de(doc)

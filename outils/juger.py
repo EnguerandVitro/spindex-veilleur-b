@@ -28,6 +28,11 @@ Les jambes du jugement, et ce qu'elles attrapent chacune
                             attendue, et le paquet scellé n'a RIEN lu ni attesté.
 7. `tache_en_erreur`      — toute autre erreur (amorçage absent, RPC, configuration, exception).
 8. `controle_rouge`       — la tâche a fait son travail et a trouvé une alerte P0 ou P1.
+8bis. `partiel` / `differentiel_partiel` (2026-09-29, BATTEMENT.md v1.3) — différentiel REPRENABLE qui a progressé sans couvrir toute la
+                            chaîne : verdict `EN_COURS`, ni VERT (la couverture n'est pas complète, KE#111) ni
+                            ROUGE (un rattrapage nominal de plusieurs exécutions ne doit pas noyer un vrai rouge,
+                            KE#153). Toute AUTRE jambe rouge l'emporte ; `differentiel_retard_non_resorbe` et
+                            `differentiel_sans_progression` restent ROUGES (progression positive exigée, KE#131).
 9. `sortie_non_nulle`     — le processus s'est terminé anormalement. **Redondance assumée et dite** :
                             `sortie_de` dérive le code de sortie du battement, donc dans le cours
                             normal cette jambe ne peut pas rougir seule. Elle couvre ce qui se passe
@@ -60,6 +65,7 @@ def juger(etat_dir, tache, code_sortie, sceau_path, precedent=None, age_max_s=AG
     maintenant = int(time.time()) if maintenant is None else int(maintenant)
     motifs = []                      # (clé, texte) — ROUGE dès qu'il y en a un
     remarques = []
+    en_cours = None                  # texte, si la tâche est un différentiel PARTIEL qui progresse
     bat_path = os.path.join(etat_dir, f"battement-{tache}.json")
     bat = None
 
@@ -112,6 +118,15 @@ def juger(etat_dir, tache, code_sortie, sceau_path, precedent=None, age_max_s=AG
             motifs.append(("tache_en_erreur",
                            f"la tâche a échoué (code « {code} ») : elle n'a pas fait son travail. "
                            f"{str(detail)[:400]}"))
+        elif resultat == "partiel" and code == "differentiel_partiel":
+            en_cours = (f"différentiel EN COURS (code « {code} ») : il a progressé, la couverture n'est pas encore "
+                        f"complète. {str(detail)[:400]}")
+        elif resultat == "partiel":
+            # BATTEMENT.md v1.3 : couverture incomplète SANS progression suffisante — rouge nommé (KE#131)
+            motifs.append((code if code in ("differentiel_sans_progression", "differentiel_retard_non_resorbe")
+                           else "differentiel_incoherent",
+                           f"différentiel PARTIEL (code « {code} ») : la couverture ne progresse pas assez. "
+                           f"{str(detail)[:400]}"))
         elif resultat == "refus":
             motifs.append(("controle_rouge",
                            f"contrôle ROUGE (code « {code} ») : la tâche a fait son travail et a trouvé "
@@ -136,7 +151,8 @@ def juger(etat_dir, tache, code_sortie, sceau_path, precedent=None, age_max_s=AG
         "tache": tache,
         "juge_le_ts": maintenant,
         "juge_le": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(maintenant)),
-        "verdict": "ROUGE" if motifs else "VERT",
+        "verdict": "ROUGE" if motifs else ("EN_COURS" if en_cours else "VERT"),
+        "en_cours": en_cours,
         "motifs": [{"cle": k, "texte": t} for k, t in motifs],
         "remarques": remarques,
         "battement": bat,
@@ -173,6 +189,9 @@ def main(argv=None):
         os.replace(tmp, a.jugement)
     for r in doc["remarques"]:
         print(f"  — {r}")
+    if doc["verdict"] == "EN_COURS":
+        print(f"EN_COURS : {doc['en_cours']}")
+        return 0
     if doc["verdict"] == "VERT":
         print(f"VERT : {doc['tache']} a fait son travail (passe "
               f"{(doc.get('battement') or {}).get('passe')}, bloc "

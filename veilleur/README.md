@@ -159,15 +159,43 @@ python3 -B -m veilleur vérifier etat/verdicts/….json     # vérification par 
 python3 -B -m veilleur passe --instance a --battement-dir <dossier>          # timer, toutes les 5 min
 python3 -B -m veilleur différentiel --instance a --portée quotidienne       # timer, chaque jour
 python3 -B -m veilleur différentiel --instance a --portée complète          # timer, chaque semaine
+python3 -B -m veilleur différentiel --instance b --portée complète --échéance-ts <epoch>   # job borné (b)
 python3 -B -m veilleur surveiller --depuis-zéro                             # reconstruction complète, à la main
 ```
 
 - **Lecture incrémentale** (`journaux.py`) : journaux figés jusqu'à `finalized` seulement, par segments
   immuables ; le hash du dernier bloc figé est **relu sur la chaîne à chaque passe** (divergence : on
   recule et on le dit). La reconstruction **complète** reste la référence (vérificateur public).
-- **Différentiels** : QUOTIDIEN = blocs figés depuis le précédent différentiel réussi + un segment de
-  recouvrement + toute plage re-figée après une reprise forcée (coût = volume du jour) ; COMPLET
-  hebdomadaire = tout depuis le déploiement.
+- **Différentiels REPRENABLES par segments** (`segments.py`, 2026-09-29) : grille FIXE de 20 200 blocs ancrée
+  au déploiement ; un point de reprise durable par segment vérifié (bornes, hash du bloc de fin lu chez le
+  fournisseur de RÉFÉRENCE, empreinte et cardinal) ; l'exécution suivante reprend au premier segment non
+  vérifié. Un segment vérifié n'est jamais relu SAUF invalidation, toujours EN AVAL : contenu du cache changé
+  (0 appel) ou hash de borne qui ne concorde plus (réorganisation, chaîne rejouée, KE#132). Un segment
+  CONTREDIT n'est jamais inscrit (KE#151). QUOTIDIEN = campagne permanente, seul le neuf est lu (adopte les
+  points du tour complet) ; COMPLET = un TOUR depuis le déploiement tous les `tour_s`, sur autant
+  d'exécutions qu'il faut ; entre deux tours, le tour terminé est ÉTENDU au neuf (après les contrôles). Budget : `--échéance-ts` et/ou
+  `SPINDEX_VEILLEUR_BUDGET_DIFFERENTIEL_{QUOTIDIEN,COMPLET}_S` (facultatif ; absent = aucune limite, cas de `a`) :
+  arrêt PROPRE avant chaque segment (estimation = max des 10 dernières durées, plafonnée au prior mesuré
+  quand l'exécution n'a encore rien vérifié : une durée aberrante n'affame jamais les suivantes) ; échéance
+  DURE (+120 s) posée sur le CLIENT RPC : délai de chaque appel réduit à ce qui reste, aucune relance ni attente
+  au-delà (appel en vol, lecture de borne et arbitrage compris) — segment abandonné, non inscrit ; figeage du
+  cache borné par la même échéance. Une finalité violée est inscrite dans l'état AVEC la correction qu'elle
+  provoque et rapportée par l'exécution suivante si la première meurt avant son rapport. **Résultat `partiel` (BATTEMENT.md v1.3) : jamais `ok` tant que la couverture n'égale pas
+  EXACTEMENT [déploiement, finalized]** — codes `differentiel_partiel` (progresse),
+  `differentiel_retard_non_resorbe` (retard qui ne diminue pas, ou incomplet au-delà de la période / du tour),
+  `differentiel_sans_progression` (rien vérifié ni figé) ; `refus/differentiel_finalite_violee` (un hash de
+  borne a changé SOUS finalized — jamais absorbé dans un `ok`, même si la relecture redevient IDENTIQUE) ;
+  `erreur/differentiel_couverture_absente` (garde : un différentiel sans bloc couverture ne sort ni `ok` ni
+  `partiel`). Bloc `couverture` au FORMAT IMPOSÉ, nom pour nom, dans le battement et repris dans
+  `health.json` : `{bloc_debut, bloc_fin_cible, bloc_fin_verifie, segments_verifies, segments_total, complet,
+  motif_partiel}`, invariant `complet == (bloc_fin_verifie == bloc_fin_cible and segments_verifies ==
+  segments_total)` gardé à l'écriture ; estimation (segments restants, retard, échéance estimée) à part, dans
+  `couverture_estimation`. Un désaccord cache ↔ relecture est relu une fois
+  en entier (KE#133/#156) puis ARBITRÉ par le fournisseur de référence sur les seuls blocs en désaccord : s'il
+  rend le cache, c'est le fournisseur des journaux qui est incohérent (arrêt nommé, cache NON contredit).
+  `--nouveau-tour` (à la main) force un tour neuf. `health.json` publie `budget_s` et, pour
+  le complet, `tour_s` (`SPINDEX_VEILLEUR_TOUR_DIFFERENTIEL_COMPLET_S`, défaut = la période de la tâche).
+  Coûts mesurés : `mesures/segments-2026-09-29.json`.
 - **Compte à rebours J+90 en premier et isolé** ; lot gagnant non réclamé = alerte **P2** dédiée.
 - **Battements** (`battement.py`, `backend/BATTEMENT.md` v1.2) : un fichier PAR TÂCHE
   (`battement-passe.json`, `battement-differentiel-quotidien.json`, `battement-differentiel-complet.json`),
@@ -251,7 +279,8 @@ Sur CHAQUE machine d'instance (`X` = `a` ou `b`), une fois `SpindexRewards` dép
    - **B** : le bloc de déploiement porte le journal du constructeur `OwnershipTransferred(0x0, …)` — preuve
      que le bloc est le bon ET que la lecture des journaux voit le contrat ;
    - **C** : le cache est figé jusqu'au `finalized` lu, point de reprise vérifié par hash ;
-   - **D** : le différentiel complet rend `IDENTIQUE`.
+   - **D** : le différentiel complet rend `IDENTIQUE` (segmenté : sous `--échéance-ts`, sortie 20 `EN_COURS`, et
+     la relance REPREND au premier segment non vérifié).
 
    Sortie 20 `EN_ATTENTE_DE_FINALITÉ` : `finalized` n'a pas encore dépassé le bloc de déploiement
    (~20 min) — relancer. Sortie 10 `REFUS` : lire `motifs`, corriger le `.env`, ne PAS activer.

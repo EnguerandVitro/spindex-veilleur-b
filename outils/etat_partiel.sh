@@ -20,6 +20,11 @@ set -uo pipefail
 TRAVAIL="${1:?ARRET : dossier de travail attendu}"
 PUB="${2:?ARRET : arbre attestations attendu}"
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$TRAVAIL/CACHE_CONTREDIT" ]; then
+  # KE#151 : un cache contredit qu'executer.sh n'a pas pu écarter ne se publie JAMAIS — chaque job le reprendrait
+  echo "::error title=veilleur b::état NON publié : cache de journaux CONTREDIT resté dans etat/ (CACHE_CONTREDIT)" >&2
+  exit 1
+fi
 if [ ! -f "$TRAVAIL/etat/journaux/curseur.json" ]; then
   echo "aucun segment figé dans $TRAVAIL/etat : rien à sauver"
   exit 3
@@ -27,6 +32,8 @@ fi
 bash "$ICI/etat_sain.sh" "$TRAVAIL/etat" || exit 1
 rm -rf "$PUB/etat" && mkdir -p "$PUB/etat" && cp -r "$TRAVAIL/etat/." "$PUB/etat/" || {
   echo "ARRET : copie de l état vers $PUB impossible" >&2; exit 1; }
+# verrous et fichiers temporaires d'écriture atomique : sans valeur hors de la machine, jamais publiés
+find "$PUB/etat" \( -name '*.verrou' -o -name '.verrou' -o -name '*.tmp' \) -type f -delete || exit 1
 git -C "$PUB" add -A etat || exit 1
 FIGE="$(python3 -B -c 'import json,sys;s=json.load(open(sys.argv[1],encoding="utf-8"))["segments"];print(s[-1]["à"] if s else "rien")' "$TRAVAIL/etat/journaux/curseur.json")" || exit 1
 if git -C "$PUB" diff --cached --quiet; then

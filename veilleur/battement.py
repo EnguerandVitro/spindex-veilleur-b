@@ -21,7 +21,11 @@ import time
 FORMAT = 1
 SERVICE = "veilleur"
 INSTANCES = ("a", "b")
-RESULTATS = ("ok", "refus", "erreur")
+# `partiel` (2026-09-29, format imposé par le coordinateur) : différentiel segmenté dont la couverture n'est PAS
+# complète. Jamais `ok` sans `couverture.complet` (garde dans `ecrire`).
+RESULTATS = ("ok", "refus", "erreur", "partiel")
+CLES_COUVERTURE = ("bloc_debut", "bloc_fin_cible", "bloc_fin_verifie", "segments_verifies", "segments_total",
+                   "complet", "motif_partiel")
 _ICI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -93,6 +97,20 @@ def cles_filet(tache):
     return f"SPINDEX_VEILLEUR_FILET_{c}_S", f"SPINDEX_VEILLEUR_FILET_{c}_SOURCE"
 
 
+# Tâches dont le travail est REPRENABLE par segments (`segments.py`) : elles seules lisent un budget.
+TACHES_SEGMENTEES = ("differentiel-quotidien", "differentiel-complet")
+# Un budget sous une minute ne laisse même pas finir la mise à jour du cache : refusé, pas arrondi.
+BUDGET_MIN_S = 60
+
+
+def cle_budget(tache):
+    return f"SPINDEX_VEILLEUR_BUDGET_{TACHES[tache]['clé']}_S"
+
+
+def cle_tour():
+    return "SPINDEX_VEILLEUR_TOUR_DIFFERENTIEL_COMPLET_S"
+
+
 def _entier(env, cle, minimum):
     v = (env.get(cle) or "").strip()
     if not v:
@@ -127,8 +145,10 @@ def planification(env):
         brut = (env.get(kper) or "").strip()
         if brut == NON_PLANIFIEE:
             plan[tache] = {"planifiée": False, "période_s": None, "précision_s": None,
-                           "délai_aléatoire_s": None,
+                           "délai_aléatoire_s": None, "budget_s": None,
                            "source": f"{kper}={NON_PLANIFIEE} (déclarée non planifiée sur cette instance)"}
+            if tache == "differentiel-complet":
+                plan[tache].update({"tour_s": None, "tour_source": "tâche non planifiée : tour à chaque exécution"})
             continue
         # Pas de contrôle d'absence ici : `_entier` porte le refus et NOMME la clé. Un second contrôle
         # au-dessus ne pourrait jamais rougir sous cassure — il aurait l'air d'une garde et n'en serait
@@ -149,6 +169,27 @@ def planification(env):
                                          f"mesure qui le fonde (ou l'inverse) serait une borne inventée.")
             plan[tache]["filet_s"] = _entier(env, kfil, plan[tache]["période_s"])
             plan[tache]["filet_source"] = src
+        # BUDGET d'une exécution (facultatif ; différentiels seulement) : une instance dont le déclencheur tue
+        # le job au bout d'un délai (GitHub : 36 min) le DÉCLARE, le différentiel s'arrête proprement avant, et
+        # `health.json` en dérive le pire cas au lieu d'une durée qui croîtrait avec l'âge du contrat. Absent :
+        # aucune limite (instance `a`, systemd), dit comme tel (`budget_s: null`).
+        kbud = cle_budget(tache)
+        if (env.get(kbud) or "").strip():
+            if tache not in TACHES_SEGMENTEES:
+                raise PlanificationError(f"ARRÊT : {kbud} déclaré, mais « {tache} » n'est pas une tâche "
+                                         f"segmentée : un budget qu'aucun code ne lit serait une borne décorative.")
+            plan[tache]["budget_s"] = _entier(env, kbud, BUDGET_MIN_S)
+        else:
+            plan[tache]["budget_s"] = None
+        # Période du TOUR complet : par défaut la période de la tâche (une exécution = un tour, cas de `a`) ;
+        # déclarée à part quand la tâche est déclenchée plus souvent qu'un tour ne se refait (`b`).
+        if tache == "differentiel-complet":
+            ktour = cle_tour()
+            brut_t = (env.get(ktour) or "").strip()
+            plan[tache]["tour_s"] = _entier(env, ktour, plan[tache]["période_s"]) if brut_t \
+                else plan[tache]["période_s"]
+            plan[tache]["tour_source"] = (f"déclaré par {ktour}" if brut_t
+                                          else "= période de la tâche (une exécution par tour)")
     if set(plan) != set(TACHES):                    # cardinal (KE#111)
         raise PlanificationError(f"ARRÊT : planification incomplète, {sorted(set(TACHES) - set(plan))} "
                                  f"sans déclaration.")
@@ -170,6 +211,9 @@ APPELS_PASSE_A_CHAUD = 64            # mesuré sur banc, indépendant de l'âge 
 LATENCE_MAX_S = 1.89                 # max mesuré, eth_getLogs 1 000 blocs sur un contrat ACTIF
 CADENCE_MAX_BLOCS_S = 9.98           # max des 3 mesures du 2026-09-21 (rapport veilleur §3)
 BLOCS_PAR_APPEL = 1000
+# Dépassement d'un budget par le segment EN VOL : 200 appels (un segment de 20 200 blocs chez dRPC, 101 blocs
+# par appel — le cas le plus lent mesuré) × la latence max mesurée. Mesuré le 2026-09-29 : 36 s en nominal.
+DEPASSEMENT_SEGMENT_S = round(200 * LATENCE_MAX_S)
 
 
 class Battement:
@@ -202,9 +246,33 @@ class Battement:
                     f"l'une pourrait être morte sans que rien ne le montre.")
             self.precedent = int(doc.get("passe") or 0)
 
-    def ecrire(self, resultat, code=None, detail=None, bloc=None, rpc=None):
+    def ecrire(self, resultat, code=None, detail=None, bloc=None, rpc=None, couverture=None,
+               couverture_estimation=None):
         if resultat not in RESULTATS:
             raise BattementError(f"ARRÊT : résultat « {resultat} » hors contrat {RESULTATS}.")
+        # Défauts de COUVERTURE : jamais une exception ici (le battement ne serait pas écrit, service muet, KE#105) —
+        # la tâche bat `erreur / differentiel_couverture_incoherente` et le bloc fautif n'est PAS publié (un lecteur
+        # en schéma fermé le rejetterait, à juste titre).
+        incoherence = None
+        if couverture is not None:
+            if set(couverture) != set(CLES_COUVERTURE):          # format IMPOSÉ, nom pour nom
+                incoherence = f"couverture hors format {sorted(couverture)} ≠ {sorted(CLES_COUVERTURE)}"
+            elif couverture["complet"] != (couverture["bloc_fin_verifie"] == couverture["bloc_fin_cible"]
+                                           and couverture["segments_verifies"] == couverture["segments_total"]):
+                incoherence = f"couverture incohérente : complet={couverture['complet']} contredit l'invariant"
+        # BATTEMENT.md v1.3 : pour une tâche reprenable, `ok` exige `couverture.complet: true`, `partiel` exige
+        # `couverture.complet: false` ; sans couverture, aucun des deux n'est possible (KE#111, jamais un vert).
+        if incoherence is None and resultat == "partiel" and (couverture is None or couverture["complet"]):
+            incoherence = "`partiel` exige une couverture NON complète (BATTEMENT.md v1.3)"
+        if incoherence is not None:
+            resultat, code, couverture, couverture_estimation = "erreur", "differentiel_couverture_incoherente", None, None
+            detail = (incoherence + " — " + str(detail or ""))[:400]
+        elif resultat == "ok" and self.tache in TACHES_SEGMENTEES and couverture is None:
+            resultat, code = "erreur", "differentiel_couverture_absente"
+            detail = (detail or "") + " — différentiel sans bloc couverture : requalifié en erreur."
+        elif resultat == "ok" and self.tache in TACHES_SEGMENTEES and not couverture["complet"]:
+            resultat, code = "partiel", "differentiel_couverture_incomplete"
+            detail = detail or "différentiel déclaré ok sans couverture complète : requalifié en partiel."
         if resultat == "ok" and bloc is None:
             # Interdit du contrat : « ok » veut dire « la passe a fait son travail ».
             resultat, code = "erreur", "aucune_lecture"
@@ -236,6 +304,12 @@ class Battement:
             # à un seul fournisseur, `{"journaux": …, "etat": …}` quand les rôles sont séparés.
             "fournisseurs": rpc.get("fournisseurs"),
         }
+        if couverture is not None:
+            # Différentiels segmentés : couverture EXACTE, segments restants, échéance estimée (champ ajouté au
+            # contrat v1.2, facultatif : un lecteur qui ne le connaît pas l'ignore ; `detail` le dit en clair).
+            doc["couverture"] = couverture
+        if couverture_estimation is not None:
+            doc["couverture_estimation"] = couverture_estimation
         _ecrire_json(self.path, doc)
         self.precedent += 1
         return doc
@@ -268,7 +342,8 @@ def enregistrer_duree(dossier, tache, duree_s, garder=200):
     return d
 
 
-def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_BLOCS_S, *, periode_s):
+def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_BLOCS_S, *, periode_s,
+             budget_s=None):
     """Pire cas d'une exécution : max(borne THÉORIQUE, max OBSERVÉ). Rend (secondes, provenance).
 
     La borne théorique vient des mesures (appels × latence max) ; l'observé la relève si la réalité est
@@ -279,27 +354,34 @@ def pire_cas(tache, observees, tete=None, deploiement=None, cadence=CADENCE_MAX_
     en dur ici était le même défaut que `TACHES["…"]["période_s"] = 300`, à un consommateur près (KE#116).
     Une tâche non planifiée n'a pas de volume prévisible : sa borne théorique n'est pas dérivable, et
     seul l'observé parle.
+
+    `budget_s` (différentiels segmentés, 2026-09-29) : une exécution s'arrête proprement avant son budget ; son
+    pire cas THÉORIQUE est alors le budget + le dépassement d'UN segment en vol (`DEPASSEMENT_SEGMENT_S`), et non
+    plus un volume qui croît avec l'âge du contrat. L'observé le relève toujours s'il est pire.
     """
     if tache == "passe":
         appels = APPELS_PASSE_A_CHAUD
     elif tache == "differentiel-quotidien":
-        from .journaux import MARGE_QUOTIDIENNE
-        appels = None if periode_s is None else (
-            APPELS_PASSE_A_CHAUD + (periode_s * cadence + MARGE_QUOTIDIENNE) / BLOCS_PAR_APPEL)
+        # Segmenté : seul le neuf depuis la dernière exécution est relu — plus aucun recouvrement.
+        appels = None if periode_s is None else (APPELS_PASSE_A_CHAUD + periode_s * cadence / BLOCS_PAR_APPEL)
     else:
         if tete is None or deploiement is None:
             appels = None
         else:
             appels = APPELS_PASSE_A_CHAUD + (tete - deploiement) / BLOCS_PAR_APPEL
     theorique = None if appels is None else appels * LATENCE_MAX_S
+    if budget_s is not None and tache in TACHES_SEGMENTEES:
+        theorique = budget_s + DEPASSEMENT_SEGMENT_S
     obs = max(observees) if observees else None
     candidats = [x for x in (theorique, obs) if x is not None]
     if not candidats:
         return None, "NON DÉRIVABLE : ni borne théorique (âge du contrat inconnu) ni durée observée"
     v = max(candidats)
+    formule = (f"budget {budget_s} s + un segment en vol {DEPASSEMENT_SEGMENT_S} s"
+               if budget_s is not None and tache in TACHES_SEGMENTEES
+               else f"{None if appels is None else round(appels)} appels × {LATENCE_MAX_S} s")
     src = ("max observé" if obs is not None and v == obs else "borne théorique") + \
-          f" (théorique {None if theorique is None else round(theorique, 1)} s = " \
-          f"{None if appels is None else round(appels)} appels × {LATENCE_MAX_S} s ; " \
+          f" (théorique {None if theorique is None else round(theorique, 1)} s = {formule} ; " \
           f"observé max {obs} s sur {len(observees)} exécution(s))"
     return round(v, 1), src
 
@@ -343,7 +425,7 @@ def retard_bloc_filet(pire_s, cadence, *, plan_tache):
 
 
 def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, *,
-                  planification, planificateur, fournisseurs):
+                  planification, planificateur, fournisseurs, couverture_courante=None):
     """`health.json` : ce que la surveillance lit pour ne rien choisir elle-même (v1.2).
 
     `planification` et `planificateur` sont OBLIGATOIRES et sans défaut (KE#62) : ils viennent du `.env`
@@ -364,7 +446,7 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, 
     for nom, t in TACHES.items():
         pl = planification[nom]
         pire, src = pire_cas(nom, durees.get(nom, []), tete, deploiement, cad,
-                             periode_s=pl["période_s"])
+                             periode_s=pl["période_s"], budget_s=pl.get("budget_s"))
         silence, retard = derive(nom, pire, cad, plan_tache=pl)
         taches[nom] = {
             "fichier": f"battement-{nom}.json",
@@ -387,8 +469,15 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, 
             # silence ADMISSIBLE (le filet, s'il y en a un, avec sa mesure).
             "période_attendue_s": pl["période_s"],
             "déclencheur": pl.get("déclencheur"),
+            # budget d'une exécution (différentiels segmentés) ; null = aucune limite, dit comme tel
+            "budget_s": pl.get("budget_s"),
+            # couverture du DERNIER différentiel de la tâche (format imposé), reprise du battement — ou de
+            # l'exécution en cours, dont le battement s'écrit juste après
+            **({"couverture": _couverture_de(dossier, nom, couverture_courante)} if nom in TACHES_SEGMENTEES else {}),
             "silence_max_source": (f"filet MESURÉ : {pl['filet_s']} s + pire — {pl['filet_source']}"
                                    if pl.get("filet_s") else "dérivé de la période déclarée"),
+            **({"tour_s": pl.get("tour_s"), "tour_source": pl.get("tour_source")}
+               if nom == "differentiel-complet" else {}),
             "formules": {"silence_max_s": "période + précision + délai_aléatoire + pire "
                                           "(+ une période par dépassement de la période)",
                          "retard_bloc_max": "ceil((pire + silence_max_s) × cadence_max)"},
@@ -404,12 +493,55 @@ def ecrire_health(dossier, instance, tete=None, deploiement=None, cadence=None, 
     return doc
 
 
+CODES_DIFFERENTIEL_PARTIEL = ("differentiel_partiel", "differentiel_retard_non_resorbe",
+                              "differentiel_sans_progression")
+
+
+def resume_couverture(c, est=None):
+    """Une ligne lisible de la couverture : ce que `detail` porte pour qui ne lit pas `couverture`."""
+    if not c:
+        return ""
+    e = (est or {}).get("échéance_estimée_ts")
+    return (f"{c['segments_verifies']} segments sur {c['segments_total']}, vérifié jusqu'au bloc "
+            f"{c['bloc_fin_verifie']} pour une cible {c['bloc_fin_cible']}"
+            + ("" if est is None else f", {est.get('segments_restants')} restant(s), échéance estimée "
+               + (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e)) if e else "non estimable")))
+
+
+def _couverture_de(dossier, tache, courante):
+    if courante and tache in courante:
+        return courante[tache]
+    try:
+        with open(os.path.join(dossier, f"battement-{tache}.json"), "r", encoding="utf-8") as fh:
+            return json.load(fh).get("couverture")
+    except (OSError, ValueError):
+        return None
+
+
 def qualifier_differentiel(res):
+    """(resultat, code, detail) d'un différentiel segmenté. PARTIEL n'est JAMAIS `ok` (KE#111/#121) :
+    résultat `partiel` (format imposé) avec un code : `differentiel_partiel` s'il progresse,
+    `differentiel_retard_non_resorbe` s'il ne résorbe pas son retard, `differentiel_sans_progression` s'il n'a rien
+    vérifié ni figé. `ok` seulement si la couverture est complète (garde de `Battement.ecrire`)."""
     etat = res.get("état")
+    cv = resume_couverture(res.get("couverture"), res.get("couverture_estimation"))
+    # Une borne dont le hash a CHANGÉ sous `finalized` (finalité violée, chaîne rejouée — KE#132) est un incident en
+    # soi : jamais absorbé dans un `ok`, même quand la relecture redevient IDENTIQUE (KE#105).
+    viol = [i for i in (res.get("invalidations") or []) if i.get("finalité_violée")] + \
+        list(res.get("finalités_violées") or [])
+    if viol and etat in ("IDENTIQUE", "PARTIEL", "VACUE"):
+        return "refus", "differentiel_finalite_violee", (
+            f"{viol[0]['motif'][:300]} — état après relecture : {etat}" + (f" ({cv})" if cv else ""))
     if etat == "IDENTIQUE":
-        return "ok", None, res.get("vacuité")
+        return "ok", None, ("couverture COMPLÈTE : " + cv) if cv else None
     if etat == "DIVERGENT":
         return "refus", "differentiel_divergent", res.get("motif")
+    if etat == "PARTIEL":
+        code = res.get("code")
+        if code not in CODES_DIFFERENTIEL_PARTIEL:
+            # une incohérence du CODE, pas de la configuration : elle ressort en `exception:RuntimeError`
+            raise RuntimeError(f"ARRÊT : différentiel PARTIEL sans code de progression connu ({code!r}).")
+        return "partiel", code, f"PARTIEL : {cv} — {str(res.get('motif'))[:240]}"
     return "refus", "differentiel_" + str(etat).lower(), res.get("motif")
 
 

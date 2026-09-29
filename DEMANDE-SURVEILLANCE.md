@@ -180,3 +180,37 @@ Je recommande **(a)**, et je peux la câbler dans un atelier suivant, banc compr
   que `a` publie**. À intégrer à la procédure de livraison : une livraison de la famille `veilleur`
   n'est terminée que quand `b` a été resynchronisée, sinon les deux instances divergent sur le CODE
   et leur accord comme leur désaccord ne veulent plus rien dire.
+
+## 7. Différentiels REPRENABLES (2026-09-29) — trois demandes, deux familles
+
+La famille `veilleur` rend les deux différentiels reprenables par segments (`veilleur/segments.py`) ; le
+différentiel COMPLET revient sur `b`. Rien de ce qui suit n'est codé ici : ce sont des demandes.
+
+**7.1 Exploitation — le déclencheur du complet.** `config/chaine-46630.json` déclare
+`differentiel-complet` toutes les **6 h** par `workflow_dispatch` (période 21 600 s, tour complet
+604 800 s, budget 1 740 s). Seuls `passe` et `differentiel-quotidien` ont aujourd'hui un déclencheur. Il
+faut un `spindex-veilleur-b-declencheur-complet-testnet.timer` (`declencher_veilleur_b.py --tache
+differentiel-complet`) **avant** de pousser `b` ; sans lui la surveillance lèvera `battement_absent` sur
+cette tâche — alerte VRAIE (la tâche ne tourne pas), pas un faux positif. Une exécution longue retient la
+file `concurrency` du dépôt : une passe au plus est écartée par exécution du complet.
+
+**7.2 Surveillance — BATTEMENT.md v1.3, émis exactement** (résultat `partiel` + bloc `couverture` aux 7 clés
+imposées, invariant gardé à l'écriture ; estimation à part dans `couverture_estimation`). **Préalable BLOQUANT au
+push de `b`** : `collecte_services.py` refusait `partiel` (hors contrat) à la date de ce lot ; il doit lire v1.3 en
+schéma fermé AVANT le premier différentiel segmenté de `b`, sinon chaque battement `partiel` est illisible.
+
+| résultat / code | sens | règle proposée |
+|---|---|---|
+| `refus` / `differentiel_divergent` | le cache contredit la chaîne (relu deux fois, arbitré par la référence) | **P0** (règle existante) |
+| `refus` / `differentiel_finalite_violee` | un hash de borne a changé SOUS `finalized` (finalité violée, chaîne rejouée) — même si la relecture est redevenue IDENTIQUE, et même rapporté par l'exécution SUIVANTE si la première est morte avant son rapport | **P0** |
+| `partiel` / `differentiel_retard_non_resorbe` | le retard de couverture ne diminue pas, ou incomplet au-delà de la période / du tour | **P1** |
+| `partiel` / `differentiel_sans_progression` | rien vérifié ni figé cette exécution | **P1** |
+| `partiel` / `differentiel_partiel` | a progressé, couverture pas encore complète | **INFO** (`couverture_estimation.échéance_estimée_ts`) |
+| `erreur` / `differentiel_couverture_incoherente` ou `_absente` | défaut du CODE du veilleur (bloc absent ou contradictoire, non publié) | **P1** |
+
+Le jugement du job de `b` publie `EN_COURS` pour `partiel/differentiel_partiel` (ni VERT ni ROUGE, avertissement
+dans l'exécution GitHub), ROUGE pour tous les autres codes ci-dessus.
+
+**7.3 Surveillance — horizon.** Au plan dRPC gratuit, le tour complet hebdomadaire de `b` tient jusqu'à
+~54 jours d'âge du contrat (4 exécutions/jour, mesure `veilleur/mesures/segments-2026-09-29.json`) ; au-delà,
+`differentiel_retard_non_resorbe` devient permanent : c'est le signal d'un plan payant, pas un bruit à acquitter.

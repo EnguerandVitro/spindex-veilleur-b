@@ -95,6 +95,11 @@ class RpcRefused(RuntimeError):
     """Le client a refusé d'émettre : méthode hors lecture seule."""
 
 
+class EcheanceDepassee(RuntimeError):
+    """L'échéance DURE d'une lecture par tranches est passée : la lecture est ABANDONNÉE entre deux tranches, et
+    l'appelant n'en tire aucune conclusion (le segment en vol n'est pas inscrit). Pas une panne du fournisseur."""
+
+
 class RpcUnavailable(RuntimeError):
     """Le RPC n'a pas répondu utilement. JAMAIS à confondre avec « rien à signaler »."""
 
@@ -195,6 +200,10 @@ class RpcClient:
         # Relance des refus TRANSITOIRES (`CLASSES_TRANSITOIRES`) : déclarée par le profil, sans défaut.
         self.relance_transitoire = verifier_relance(relance_transitoire)
         self._sleep = time.sleep
+        # Échéance DURE (temps réel) posée par un appelant à durée bornée (différentiel segmenté) : chaque appel
+        # a un délai ≤ ce qui reste, et aucune relance ni attente ne la franchit (revue 2026-09-29, P1-B).
+        # None (la passe, tout le reste) : comportement inchangé.
+        self._echeance_dure = None
         self.stats = {"calls": 0, "http": {}, "transport": 0, "rpc_error": 0, "http_429": 0, "retries": 0,
                       "attente_429_s": 0.0, "plages_découpées": 0,
                       "relances_transitoires": 0, "attente_transitoire_s": 0.0,
@@ -256,6 +265,23 @@ class RpcClient:
             self.stats["transport"] += 1
             return {"kind": "transport", "error": repr(e)[:250], "dt": time.time() - t0}
 
+    def poser_echeance_dure(self, t):
+        """Pose (ou retire, None) l'échéance dure de CE client et de son client d'état s'il en a un."""
+        self._echeance_dure = t
+        autre = getattr(self, "etat", None)
+        if autre is not None and autre is not self:
+            autre._echeance_dure = t
+
+    def _borne(self, timeout, attente=0.0):
+        """Délai du prochain appel sous l'échéance dure ; lève `EcheanceDepassee` si elle est (ou serait) franchie."""
+        e = self._echeance_dure
+        if e is None:
+            return timeout
+        reste = e - time.time() - attente
+        if reste <= 0:
+            raise EcheanceDepassee(f"échéance dure atteinte ({round(-reste, 1)} s au-delà) : appel non émis")
+        return max(1.0, min(timeout or self.timeout, reste))
+
     def _with_backoff(self, payload, timeout=None):
         """429 : ATTENTE (Retry-After, sinon exponentielle bornée), comptée. Transport / 502-504 : relances.
 
@@ -269,7 +295,7 @@ class RpcClient:
         essais_t = 0          # relances de refus TRANSITOIRES, bornées par le profil
         attendu_t = 0.0
         while True:
-            r = self._post(payload, timeout=timeout)
+            r = self._post(payload, timeout=self._borne(timeout))
             if r["kind"] == "http" and r.get("status") == 429:
                 n_429 += 1
                 ra = r.get("retry_after")
@@ -279,6 +305,7 @@ class RpcClient:
                     return r
                 attente_429 *= 2
                 attendu_429 += w
+                self._borne(timeout, attente=w)          # aucune attente ne franchit l'échéance dure
                 self.stats["attente_429_s"] = round(self.stats["attente_429_s"] + w, 3)
                 self.stats["retries"] += 1
                 self._sleep(w)
@@ -295,6 +322,7 @@ class RpcClient:
                     return dict(r, transitoire={"relances": essais_t, "épuisée": True,
                                                 "attente_s": round(attendu_t, 3)})
                 w = min(rel["attente_initiale_s"] * (2 ** essais_t), rel["attente_max_s"])
+                self._borne(timeout, attente=w)
                 essais_t += 1
                 attendu_t += w
                 self.stats["relances_transitoires"] += 1
@@ -305,6 +333,7 @@ class RpcClient:
             if not retryable or essais >= self.max_retries:
                 return r
             essais += 1
+            self._borne(timeout, attente=delay)
             self.stats["retries"] += 1
             self._sleep(delay + random.random() * 0.2)
             delay *= 2
@@ -404,6 +433,8 @@ class RpcClient:
         span = verifier_span(max_span if max_span is not None else self.max_log_span)
         decoupages = 0
         while cur <= to_block:
+            # (l'échéance DURE d'un appelant borné est portée par le CLIENT, `_borne` : chaque appel, relances
+            # comprises — un contrôle ici entre deux tranches serait une garde doublée, indémontrable, KE#139)
             hi = min(cur + span - 1, to_block)
             r = self.get_logs(address, topics, cur, hi, timeout=timeout)
             if r["kind"] != "ok":

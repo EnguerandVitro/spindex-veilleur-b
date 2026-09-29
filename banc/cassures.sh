@@ -157,9 +157,10 @@ casser temoin_positif "temoin" outils/juger.py '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s = s.replace("        \"verdict\": \"ROUGE\" if motifs else \"VERT\",",
-              "        \"verdict\": \"ROUGE\",")
-open(p, "w", encoding="utf-8").write(s)
+s2 = s.replace("        \"verdict\": \"ROUGE\" if motifs else (\"EN_COURS\" if en_cours else \"VERT\"),",
+               "        \"verdict\": \"ROUGE\",")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
 '
 
 echo
@@ -369,7 +370,7 @@ casser cache_contredit "cache_contredit" outils/executer.sh '
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s2 = s.replace("      mv \"$ETAT/etat/journaux\" \"$REJ\"\n", "      true\n")
+s2 = s.replace("  mv \"$ETAT/etat/journaux\" \"$rej\" 2>/dev/null || rm -rf \"$ETAT/etat/journaux\" 2>/dev/null\n", "  true\n")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '
@@ -480,6 +481,116 @@ import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 s2 = s.replace("        if hors_index:\n", "        if False:\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 35 : l échéance n est plus passée au différentiel (il serait TUÉ par le délai du job, sans point de reprise)"
+casser echeance_tache "differentiels" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("--battement-dir \"$ETAT/etat\" --échéance-ts \"$ECHEANCE\" )", "--battement-dir \"$ETAT/etat\" )")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 36 : un cache CONTREDIT par un différentiel PLANIFIÉ n est plus écarté (KE#151)"
+casser cache_contredit_tache "cache_contredit" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    ecarter_cache \"$TACHE DIVERGENT\"\n", "    true\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 37 : le budget n est plus écrit au .env (health publierait un pire cas qui croît avec l âge du contrat)"
+casser budget_ecrit "cadence" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        if t in TACHES_SEGMENTEES_B:\n", "        if False:\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 38 : la période du TOUR complet n est plus écrite (le tour se referait à chaque déclenchement)"
+casser tour_ecrit "cadence" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("            out.append((\"SPINDEX_VEILLEUR_TOUR_DIFFERENTIEL_COMPLET_S\", int(d[\"tour_s\"])))", "            pass")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 39 : un différentiel PARTIEL qui progresse redevient ROUGE (noierait un vrai rouge, KE#153)"
+casser juger_en_cours "differentiels" outils/juger.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("        elif resultat == \"partiel\" and code == \"differentiel_partiel\":", "        elif False:")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 40 : un différentiel PARTIEL qui progresse devient VERT (jamais vert sans couverture complète, KE#111)"
+casser juger_jamais_vert "differentiels" outils/juger.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("(\"EN_COURS\" if en_cours else \"VERT\")", "\"VERT\"")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 41 : la borne haute du budget redevient 36 min (échéance dure au-delà du kill de l étape)"
+casser budget_borne "cadence" outils/preparer.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    haute = int(ETAPE_VEILLER_S - MARGE_DURE_S - MARGE_JUGEMENT_LOT_S)", "    haute = ETAPE_VEILLER_S - 1")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 42 : un cache contredit NON écartable ne pose plus le marqueur (il serait publié, KE#151)"
+casser marqueur_cache_contredit "cache_contredit" outils/executer.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("    touch \"$ETAT/CACHE_CONTREDIT\"\n", "    true\n")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 43 : l état partiel se publie malgré le marqueur CACHE_CONTREDIT"
+casser etat_partiel_marqueur "cache_contredit" outils/etat_partiel.sh '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("if [ -f \"$TRAVAIL/CACHE_CONTREDIT\" ]; then", "if false; then")
+assert s2 != s, "motif de cassure introuvable"
+open(p, "w", encoding="utf-8").write(s2)
+'
+
+echo
+echo "--- 44 : un jugement VERT sur un battement partiel est accepté par le vérificateur"
+casser vert_partiel "cadence" outils/verifier_lot.py '
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2 = s.replace("            if bat.get(\"resultat\") == \"partiel\":", "            if False:")
 assert s2 != s, "motif de cassure introuvable"
 open(p, "w", encoding="utf-8").write(s2)
 '

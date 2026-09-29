@@ -17,7 +17,13 @@
 #   B_ETAT   dossier de travail        B_CONFIG  fichier de chaîne        B_TACHE  passe|differentiel-*
 #   B_LOT    dossier du lot publié     SPINDEX_B_RPC_URL  SPINDEX_B_ATTEST_KEY_HEX
 #   B_VECTEURS  (banc seulement) vecteurs de convention à la place de config/vecteurs-convention.json
+#   B_BUDGET_S  (banc seulement) budget PLUS COURT que `budget_veiller_s` de la configuration (jamais plus long :
+#               le paquet retient la plus proche des deux échéances)
 set -uo pipefail
+# Échéance d arrêt PROPRE des différentiels, comptée depuis MAINTENANT : l étape « Veiller » est tuée à 36 min,
+# et un différentiel tué ne publie ni battement ni point de reprise. Lue plus bas, après validation de la
+# configuration par preparer.py ; l horloge, elle, part d ici.
+DEBUT="$(date +%s)"
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Pas d apostrophe dans ce message : bash ouvre une citation sur le ' contenu dans ${VAR:?mot}.
@@ -33,6 +39,25 @@ PY=(python3 -B)
 echo "::: veilleur b — tâche « $TACHE »"
 mkdir -p "$ETAT/etat"
 rm -f "$ETAT/ARRET.json"     # marqueur d'amorçage interrompu : jamais hérité d'une exécution précédente
+rm -f "$ETAT/ETAPE.json"     # étape EN COURS (lue par la Barrière si « Veiller » est tué au délai)
+rm -f "$ETAT/CACHE_CONTREDIT"   # marqueur « cache contredit NON écarté » : jamais hérité
+rm -f "$ETAT/JUGEMENT.json"     # un jugement d'une exécution précédente ne doit pas être lu comme celui-ci
+# KE#151 : écarter un cache CONTREDIT hors de `etat/`. Si ni le déplacement ni la suppression n'aboutissent, le
+# cache est TOUJOURS là : on le DIT et on pose `CACHE_CONTREDIT`, qui interdit toute publication de `etat/`
+# (etat_partiel.sh, étape « Publier ») — jamais un « SUPPRIMÉ » affiché sur un cache resté en place.
+ecarter_cache() {   # <motif>
+  local rej="$ETAT/journaux-rejete-$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "$ETAT/etat/journaux" "$rej" 2>/dev/null || rm -rf "$ETAT/etat/journaux" 2>/dev/null
+  if [ -d "$ETAT/etat/journaux" ]; then
+    touch "$ETAT/CACHE_CONTREDIT"
+    echo "::error title=veilleur b::cache de journaux CONTREDIT ($1) et IMPOSSIBLE à écarter : etat/journaux reste en place, la publication de etat/ est BLOQUÉE (CACHE_CONTREDIT)"
+  elif [ -d "$rej" ]; then
+    echo "::error title=veilleur b::cache de journaux CONTREDIT ($1) — écarté dans $rej, non publié ; relu depuis le déploiement au prochain job"
+  else
+    echo "::error title=veilleur b::cache de journaux CONTREDIT ($1) — déplacement impossible, SUPPRIMÉ ; relu depuis le déploiement au prochain job"
+  fi
+}
+etape() { "${PY[@]}" -c 'import json,sys,time;json.dump({"étape":sys.argv[2],"début":time.strftime("%H:%M:%SZ",time.gmtime())},open(sys.argv[1],"w",encoding="utf-8"),ensure_ascii=False)' "$ETAT/ETAPE.json" "$1"; }
 
 # ---------------------------------------------------------------- 1. la copie est-elle le code scellé
 echo "--- 1/6 sceau de la copie"
@@ -49,6 +74,11 @@ echo "--- 1bis/6 convention merkle conforme au contrat"
 echo "--- 2/6 configuration"
 "${PY[@]}" "$RACINE/outils/preparer.py" --config "$CONFIG" --etat "$ETAT" || exit 2
 export SPINDEX_VEILLEUR_ENV="$ETAT/veilleur-b.env"
+BUDGET="$("${PY[@]}" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["budget_veiller_s"])' "$CONFIG")" \
+  || { echo "ARRÊT : budget_veiller_s illisible dans $CONFIG." >&2; exit 2; }
+if [ -n "${B_BUDGET_S:-}" ] && [ "$B_BUDGET_S" -lt "$BUDGET" ]; then BUDGET="$B_BUDGET_S"; fi
+ECHEANCE=$((DEBUT + BUDGET))
+echo "    échéance d arrêt propre des différentiels : $(date -u -d "@$ECHEANCE" +%H:%M:%SZ) (budget $BUDGET s)"
 
 # ---------------------------------------------------------------- 2bis. état d'un AUTRE déploiement ?
 # Au redéploiement, `outils/maj_chaine.py` change la configuration (commit humain, prouvé sur la chaîne), mais
@@ -84,11 +114,15 @@ echo "    compteur de passe avant exécution : $PRECEDENT"
 # reconstruit ici depuis la chaîne, ce qui est long mais correct.
 if [ ! -f "$ETAT/etat/amorcage.json" ]; then
   echo "--- 3/6 amorçage (registre absent : reconstruction depuis la chaîne)"
+  etape "amorçage"
   TXD="$("${PY[@]}" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["tx_deploiement"])' "$CONFIG")"
   # Le rapport s'écrit HORS de `etat/` : `etat/` est publié tel quel, y compris après un échec.
   RAPPORT="$ETAT/amorcage-rapport.json"
   AM=0
-  ( cd "$RACINE" && "${PY[@]}" -m veilleur amorcer --instance b --tx-deploiement "$TXD" ) > "$RAPPORT" || AM=$?
+  # la preuve D (différentiel complet) est SEGMENTÉE : sous l échéance, elle s arrête proprement (EN_COURS, 20) ;
+  # l état partiel publié la fait REPRENDRE au premier segment non vérifié au job suivant
+  ( cd "$RACINE" && "${PY[@]}" -m veilleur amorcer --instance b --tx-deploiement "$TXD" --échéance-ts "$ECHEANCE" ) \
+    > "$RAPPORT" || AM=$?
   cat "$RAPPORT"            # données publiques : le journal du job doit les montrer
   if [ "$AM" != 0 ]; then
     # Un cache que la chaîne a CONTREDIT (D = DIVERGENT) ne doit pas survivre : publié comme état partiel,
@@ -98,9 +132,7 @@ if [ ! -f "$ETAT/etat/amorcage.json" ]; then
 try: print((json.load(open(sys.argv[1],encoding="utf-8")).get("preuves") or {}).get("D_différentiel_complet",{}).get("état",""))
 except Exception: print("")' "$RAPPORT")"
     if [ "$D_ETAT" = "DIVERGENT" ] && [ -d "$ETAT/etat/journaux" ]; then
-      REJ="$ETAT/journaux-rejete-$(date -u +%Y%m%dT%H%M%SZ)"
-      mv "$ETAT/etat/journaux" "$REJ"
-      echo "::error title=veilleur b::cache de journaux CONTREDIT par la chaîne (différentiel complet DIVERGENT) — écarté dans $REJ, non publié ; le prochain amorçage relira depuis le déploiement"
+      ecarter_cache "amorçage : différentiel complet DIVERGENT"
     fi
     FIGE="$("${PY[@]}" -c 'import json,sys
 try: s=json.load(open(sys.argv[1],encoding="utf-8"))["segments"]; print(s[-1]["à"] if s else "aucun")
@@ -117,6 +149,7 @@ fi
 
 # ---------------------------------------------------------------- 5. la tâche elle-même
 echo "--- 4/6 tâche « $TACHE »"
+etape "tâche $TACHE"
 CODE=0
 if [ "$TACHE" = "passe" ]; then
   ( cd "$RACINE" && "${PY[@]}" -m veilleur passe --instance b --battement-dir "$ETAT/etat" ) || CODE=$?
@@ -124,9 +157,23 @@ else
   PORTEE="complète"
   [ "$TACHE" = "differentiel-quotidien" ] && PORTEE="quotidienne"
   ( cd "$RACINE" && "${PY[@]}" -m veilleur différentiel --instance b --portée "$PORTEE" \
-      --battement-dir "$ETAT/etat" ) || CODE=$?
+      --battement-dir "$ETAT/etat" --échéance-ts "$ECHEANCE" ) || CODE=$?
+  # KE#151, pour la TÂCHE comme pour l amorçage : un cache CONTREDIT par la chaîne (différentiel DIVERGENT)
+  # ne doit pas être republié dans `etat/` — chaque job le reprendrait et refuserait pour toujours. Il est
+  # écarté (conservé pour examen, jamais publié) ; la passe suivante re-fige depuis le déploiement. Les points
+  # de reprise du différentiel restent : le contrôle (i) les invalide si le cache reconstruit diffère.
+  # rapport écrit PAR CETTE exécution seulement (mtime ≥ début) : un DIVERGENT d hier ne doit pas faire écarter
+  # le cache reconstruit depuis
+  D_TACHE="$("${PY[@]}" -c 'import json,os,sys
+try:
+    p=sys.argv[1]; print(json.load(open(p,encoding="utf-8")).get("état","") if os.path.getmtime(p) >= int(sys.argv[2]) else "")
+except Exception: print("")' "$ETAT/etat/derniere-$TACHE.json" "$DEBUT")"
+  if [ "$D_TACHE" = "DIVERGENT" ] && [ -d "$ETAT/etat/journaux" ]; then
+    ecarter_cache "$TACHE DIVERGENT"
+  fi
 fi
 echo "    code de sortie du paquet scellé : $CODE"
+etape "jugement et lot"      # la tâche est allée au bout ; un arrêt plus loin est dit pour ce qu'il est
 
 # ---------------------------------------------------------------- 6. jugement, puis lot (même si ROUGE)
 echo "--- 5/6 jugement"

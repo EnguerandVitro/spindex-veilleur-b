@@ -40,6 +40,11 @@
 # publié, jamais avant (un veilleur qui se tait quand il trouve quelque chose est pire qu'absent).
 
 name: veilleur-b
+# Le NOM de chaque exécution est EXACTEMENT le nom de tâche de l'index des battements (`passe`,
+# `differentiel-quotidien`, `differentiel-complet`) : le déclencheur juge la conclusion du dernier run PAR TÂCHE — sans
+# cela, un `differentiel-complet` en échec serait masqué par la `passe` réussie suivante. Un run planifié (cron, sans
+# `inputs`) est une `passe`.
+run-name: ${{ inputs.tache || 'passe' }}
 
 on:
   schedule:
@@ -54,6 +59,10 @@ on:
 
 # Jamais deux exécutions en parallèle : elles se disputeraient la branche et, pire, le compteur de
 # passe (qui doit être strictement croissant) et le verrou du cache des journaux.
+# Décidé le 2026-09-29 (atelier veilleur) : PAS de groupe par tâche. Deux tâches parallèles partiraient du MÊME
+# `etat/` restauré et publieraient chacune `etat/` EN ENTIER (cache des journaux, points de reprise, health.json) :
+# la seconde poussée écraserait les écritures de la première — un rebase ne réconcilie pas deux curseurs de cache
+# divergents. Le prix, écrit au README : une `passe` peut attendre la fin d'un `differentiel-complet` (≤ 45 min).
 concurrency:
   group: veilleur-b
   cancel-in-progress: false
@@ -103,7 +112,9 @@ jobs:
         id: veille
         continue-on-error: true       # la publication doit avoir lieu même quand le jugement est ROUGE
         # borné SOUS les 45 min du job : Artefact, Publier et Barrière doivent garder ≥ 8 min, sinon un
-        # amorçage long tuerait le job avant que l'état partiel ne soit sauvé
+        # amorçage long tuerait le job avant que l'état partiel ne soit sauvé. Les différentiels (et la preuve D
+        # d'un amorçage) s'arrêtent PROPREMENT avant, à `budget_veiller_s` (config, 1 740 s) compté depuis le
+        # début de cette étape, et reprennent au job suivant (veilleur/segments.py).
         timeout-minutes: 36
         env:
           B_ETAT: ${{ github.workspace }}/travail
@@ -129,6 +140,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
+          if [ -f travail/CACHE_CONTREDIT ]; then
+            # KE#151 : un cache CONTREDIT que executer.sh n'a pas pu écarter reste dans travail/etat — rien n'est
+            # publié (ni état, ni lot adossé à cet état) : chaque job suivant le reprendrait et refuserait
+            echo "::error title=veilleur b::publication BLOQUÉE : cache de journaux CONTREDIT resté dans etat/ (CACHE_CONTREDIT) ; intervention humaine"
+            exit 1
+          fi
           if [ ! -f lot/MANIFESTE.json ]; then
             # Pas de lot signé. Mais un amorçage interrompu a pu figer des segments de journaux : on les
             # sauve (non signés, et le commit le dit) pour que le job suivant REPRENNE au lieu de repartir
@@ -167,10 +184,12 @@ jobs:
             cp -r lot/. "publication/lots/$HORO-${GITHUB_RUN_ID}/"
           fi
 
-          # l'état de travail, pour l'exécution suivante — jamais un fichier de type secret
+          # l'état de travail, pour l'exécution suivante — jamais un fichier de type secret, ni un verrou
+          # ou un fichier temporaire d'écriture atomique interrompue (sans valeur hors de la machine)
           bash outils/etat_sain.sh travail/etat
           rm -rf publication/etat && mkdir -p publication/etat
           cp -r travail/etat/. publication/etat/
+          find publication/etat \( -name '*.verrou' -o -name '.verrou' -o -name '*.tmp' \) -type f -delete
           # le vérificateur voyage avec les lots : un lecteur n'a besoin de rien d'autre
           cp outils/verifier_lot.py publication/verifier_lot.py
 
@@ -187,6 +206,23 @@ jobs:
         if: always()
         run: |
           if [ ! -f lot/JUGEMENT.json ]; then
+            if [ ! -f travail/ARRET.json ] && [ -f travail/JUGEMENT.json ]; then
+              # le jugement EXISTE : c'est la fabrication ou la revérification du lot qui a échoué, pas la lecture
+              python3 -B -c 'import json;j=json.load(open("travail/JUGEMENT.json",encoding="utf-8"));print("::error title=veilleur b lot non publié::jugement %s produit (tâche %s), mais le lot n a pas pu être fabriqué ou revérifié (publier.py / verifier_lot.py) — voir l étape « Veiller »." % (j.get("verdict"), j.get("tache")))'
+              exit 1
+            fi
+            if [ ! -f travail/ARRET.json ] && [ -f travail/ETAPE.json ]; then
+              # « Veiller » tué (délai du job, runner coupé) PENDANT une étape qui lit la chaîne : le dire tel quel,
+              # jamais « rien n'a été lu » (les points de reprise figés sont sauvés par l'état partiel)
+              python3 -B -c 'import json;e=json.load(open("travail/ETAPE.json",encoding="utf-8"));print("::error title=veilleur b interrompu::« Veiller » interrompu pendant l étape « %s » (commencée à %s) — délai du job ou runner coupé ; la chaîne A été lue, les points de reprise figés ont été sauvés en état partiel s il y en avait." % (e["étape"], e["début"]))'
+              exit 1
+            fi
+            if [ -f travail/ARRET.json ] && python3 -B -c 'import json,sys;sys.exit(0 if json.load(open("travail/ARRET.json",encoding="utf-8"))["code"]==20 else 1)'; then
+              # amorçage EN COURS (paquet : sortie 20) : figeage C ou preuve D arrêtés PROPREMENT à l'échéance, repris
+              # au job suivant — pas un refus. Le job reste en échec (aucun registre, aucun lot signé), nommé tel quel.
+              python3 -B -c 'import json;a=json.load(open("travail/ARRET.json",encoding="utf-8"));print("::error title=veilleur b amorçage EN COURS::amorçage EN COURS, repris au job suivant (différentiel complet : %s ; journaux figés jusqu au bloc %s). Aucun lot signé tant qu il n est pas AMORCÉ ; l état partiel est sauvé." % (a["différentiel_D"] or "non atteint", a["journaux_figés_jusqu_à"]))'
+              exit 1
+            fi
             if [ -f travail/ARRET.json ]; then
               # amorçage interrompu : la chaîne A été lue, et le message doit le dire exactement
               python3 -B -c 'import json;a=json.load(open("travail/ARRET.json",encoding="utf-8"));print("::error title=veilleur b amorçage::amorçage interrompu (code %s) — différentiel complet : %s ; journaux figés jusqu au bloc %s. Aucun lot signé ; l état partiel a été sauvé si des segments étaient figés, et le job suivant reprend là." % (a["code"], a["différentiel_D"] or "non atteint", a["journaux_figés_jusqu_à"]))'
@@ -202,6 +238,10 @@ jobs:
               print(f"VERT — {d['tache']} passe {(d.get('battement') or {}).get('passe')}")
               for r in d.get("remarques") or []:
                   print(f"  remarque : {r}")
+              sys.exit(0)
+          if d["verdict"] == "EN_COURS":
+              # jamais VERT, jamais muet : un avertissement nommé, et le lot publié porte « EN_COURS »
+              print(f"::warning title=veilleur b différentiel en cours::{d['en_cours']}")
               sys.exit(0)
           for m in d["motifs"]:
               print(f"::error title=veilleur b {m['cle']}::{m['texte']}")

@@ -169,6 +169,32 @@ TACHES_B = {"passe": "PASSE", "differentiel-quotidien": "DIFFERENTIEL_QUOTIDIEN"
             "differentiel-complet": "DIFFERENTIEL_COMPLET"}
 
 
+TACHES_SEGMENTEES_B = ("differentiel-quotidien", "differentiel-complet")
+
+
+# `timeout-minutes: 36` de l'étape « Veiller » du workflow ; et ce qu'il faut APRÈS l'échéance dure pour juger,
+# fabriquer le lot et le revérifier (mesuré : quelques secondes ; 300 s = marge écrite, pas une mesure).
+ETAPE_VEILLER_S = 36 * 60
+MARGE_JUGEMENT_LOT_S = 300
+
+
+def budget_veiller(c):
+    """Budget d'une exécution de l'étape « Veiller », en secondes : l'échéance d'arrêt PROPRE des différentiels.
+    Obligatoire, sans défaut (KE#73) : sans lui, un différentiel relirait jusqu'à être TUÉ par le délai du job,
+    sans battement ni point de reprise publié."""
+    b = c.get("budget_veiller_s")
+    if ICI not in sys.path:
+        sys.path.insert(0, ICI)
+    from veilleur.segments import MARGE_DURE_S         # lue dans le paquet scellé, jamais recopiée
+    haute = int(ETAPE_VEILLER_S - MARGE_DURE_S - MARGE_JUGEMENT_LOT_S)
+    if isinstance(b, bool) or not isinstance(b, int) or not 60 <= b <= haute:
+        raise PreparerError(
+            f"ARRÊT : `budget_veiller_s` vaut {b!r} : attendu un entier de secondes dans [60, {haute}] — l'étape "
+            f"« Veiller » est tuée à {ETAPE_VEILLER_S} s, l'échéance DURE vaut budget + {MARGE_DURE_S:g} s, et "
+            f"{MARGE_JUGEMENT_LOT_S} s sont réservées au jugement, au lot et à sa vérification. Rien n'est deviné.")
+    return b
+
+
 def planification_env(c):
     """Les clés de planification du `.env`, tirées de `planification` de la configuration. SANS défaut :
     une tâche absente, une valeur manquante, un filet sans sa mesure → ARRÊT qui nomme la clé.
@@ -194,6 +220,14 @@ def planification_env(c):
                 (f"SPINDEX_VEILLEUR_PRECISION_{cle}_S", int(d["precision_s"])),
                 (f"SPINDEX_VEILLEUR_DELAI_ALEATOIRE_{cle}_S", int(d["delai_aleatoire_s"])),
                 (f"SPINDEX_VEILLEUR_DECLENCHEUR_{cle}", d["declencheur"])]
+        if t in TACHES_SEGMENTEES_B:
+            # le MÊME budget que l'échéance passée par `executer.sh` : `health.json` en dérive le pire cas publié
+            out.append((f"SPINDEX_VEILLEUR_BUDGET_{cle}_S", budget_veiller(c)))
+        if t == "differentiel-complet":
+            if not d.get("tour_s"):
+                raise PreparerError("ARRÊT : `planification.differentiel-complet.tour_s` absent : la période d'un "
+                                    "TOUR complet ne se devine pas (elle n'est pas celle du déclencheur).")
+            out.append(("SPINDEX_VEILLEUR_TOUR_DIFFERENTIEL_COMPLET_S", int(d["tour_s"])))
         if d.get("filet_s") is not None or d.get("filet_source"):
             if not (d.get("filet_s") and d.get("filet_source")):
                 raise PreparerError(f"ARRÊT : `planification.{t}` : filet_s et filet_source vont ensemble.")

@@ -70,12 +70,12 @@ qu'un témoin absent.
 
 `veilleur/` est une copie du paquet scellé `backend/veilleur`.
 
-> **État au 2026-09-28, soir.** La copie est prise sur le **scellé** de la famille qui déclare le 408 de
-> dRPC comme refus TRANSITOIRE (`FIGE.json` `19345435…`, empreinte `f02dcd48…`) — le premier job de `b`
-> (run 36469251579) avait été arrêté par ce 408 au milieu du ré-amorçage. **Ce scellé n'est pas encore
-> livré** : `a` tourne sur la release `5c670aa9…` (empreinte `54606ab6…`), donc `resynchroniser.sh`
-> affiche **DÉSACCORD** jusqu'à la livraison de `a` sur ce scellé, puis se relance sans argument (source =
-> release en service). `config/chaine-46630.json` vise le `SpindexRewards` post-C-4 `0x34ebcae3…`
+> **État au 2026-09-29.** La copie est prise sur le **scellé** de la famille qui rend les différentiels
+> REPRENABLES par segments et publie le bloc `couverture` de BATTEMENT.md v1.3 (`FIGE.json` `ad1f5368…`,
+> empreinte `e07912f2…`). **Ce scellé n'est pas encore livré** : `a` publie `e357d89a…`, donc
+> `resynchroniser.sh` affiche **DÉSACCORD** jusqu'à la livraison de `a` sur ce scellé, puis se relance sans
+> argument (source = release en service, qui ramène aussi `veilleur/LIVRAISON.json`, absent d'une copie prise
+> sur l'arbre de travail). `config/chaine-46630.json` vise le `SpindexRewards` post-C-4 `0x34ebcae3…`
 > (bloc 125 796 406), écrit par `outils/maj_chaine.py`, preuves sur la chaîne comprises.
 
 La règle d'exploitation reste : `b` doit exécuter le code que `a` exécute, pris dans une copie scellée,
@@ -100,10 +100,10 @@ de chaque job**, avant toute lecture de la chaîne) :
 
 L'ancrage 3 est le seul vérifiable de l'extérieur : l'instance `a` écrit la **même** valeur dans son
 `health.json` et dans chacun de ses battements, à chaque passe. Valeur de la copie (scellé du
-2026-09-28, soir ; `a` publiera la même une fois livrée sur ce scellé) :
+2026-09-29 ; `a` publiera la même une fois livrée sur ce scellé) :
 
 ```
-f02dcd480e9dde32488c5dc9ad22cd40d9705687ce9becb5e9f6ddfaf05c5e68
+e07912f2f91441ef6f0c3197e1f35f0502812938b5ad3b8564b654a7daa527fa
 ```
 
 Deux instances qui ne portent pas cette même empreinte n'exécutent pas le même code, et leur accord
@@ -166,14 +166,21 @@ du sujet) ; les journaux de dRPC n'entrent dans le cache qu'après avoir prouvé
 du segment et que leurs `blockHash` sont ceux que lit le nœud officiel. Ce que ce lien ne couvre PAS : un
 bloc pour lequel dRPC OMETTRAIT des journaux sans rien rendre — il faudrait une seconde source de journaux.
 
-**Ce que la reprise n'économise PAS.** Elle ne sauve que la jambe C de l'amorçage (la relecture vers le
-cache). La jambe D — le différentiel complet, qui relit TOUT depuis le bloc de déploiement sans cache, et
-qui est ce qui interdit d'attester sur un cache faux — n'a pas de reprise et grandit avec l'âge du
-contrat. Mesuré le 2026-09-28 (cadence 0,156 s/bloc, 101 blocs par appel, dRPC entre 0,195 et 0,30 s par
-appel) : **D coûte 5 488 appels, soit 18 à 27 min, par jour de chaîne depuis le déploiement**
-(2026-09-28T16:59Z). Il dépasse les 36 min de l'étape « Veiller » à un âge de 1,3 à 2 jours, soit
-**entre le 2026-09-30 vers 00:30Z et 17:20Z** selon la latence. L'amorçage de `b` doit donc aboutir
-avant ; au-delà, il faut un D lui-même repris par segments (famille `veilleur`), pas un délai plus long.
+**Les différentiels et la preuve D sont REPRENABLES (2026-09-29).** La famille `veilleur` les découpe en
+segments de 20 200 blocs à bornes fixes (`veilleur/segments.py`) : chaque segment vérifié laisse un point de
+reprise durable dans `etat/differentiel-{quotidien,complet}.json`, que la branche `attestations` restaure. Chaque
+exécution s'arrête PROPREMENT à `budget_veiller_s` (1 740 s, compté depuis le début de « Veiller » ; le segment
+en vol a une échéance DURE à +120 s), publie un battement `partiel` avec son bloc `couverture` (jugement
+**EN_COURS** s'il progresse — ni VERT ni ROUGE, avertissement dans l'exécution GitHub —, ROUGE s'il ne résorbe pas
+son retard) et la suivante reprend au premier segment non vérifié. Un job TUÉ au délai est dit comme tel par la
+Barrière (`travail/ETAPE.json` : étape en cours), jamais « rien n'a été lu ». Mesuré le 2026-09-29 (`veilleur/mesures/segments-2026-09-29.json`) :
+**200 appels et ≈ 36 s par segment chez dRPC**, ≈ 48 segments (≈ 2,2 jours de chaîne à 5,08 blocs/s) par
+exécution. Un amorçage à froid dont la preuve D (ou le figeage C) ne tient pas dans une exécution rend
+`EN_COURS` côté paquet (sortie 20) — à ne pas confondre avec le verdict `EN_COURS` d'un différentiel : le JOB, lui,
+est ROUGE « amorçage interrompu » (pas de registre, pas de lot signé) —, l'état partiel est publié, et le job
+suivant le poursuit. Ce qui n'est PAS repris : la PASSE elle-même (un
+cache perdu sur un contrat âgé se re-fige par pas de 200 appels, sauvés par l'état partiel, mais la passe qui
+le fait n'a pas de budget).
 
 **Propriété nouvelle, à garder en tête : tout ce qui est dans `etat/` survit à un échec.** C'est voulu pour
 le cache, et c'est pourquoi deux gardes l'accompagnent : un cache que D a CONTREDIT est écarté hors de
@@ -206,13 +213,33 @@ Depuis le 2026-09-28, `b` publie **deux bornes distinctes et nommées** par tâc
 |---|---|---|---|
 | `passe` | 900 | `workflow_dispatch` toutes les 15 min par la machine de surveillance | ≥ 32 400 s : filet = cron GitHub, 471 min mesurés + marge → 9 h |
 | `differentiel-quotidien` | 86 400 | `workflow_dispatch` une fois par jour (04:37 UTC) — déclencheur externe SEUL, aucun filet | dérivé de la période (86 400 + 600 + durée) |
-| `differentiel-complet` | — | **non planifié sur `b`** | — |
+| `differentiel-complet` | 21 600 | `workflow_dispatch` toutes les 6 h — **déclencheur À CRÉER côté exploitation** | dérivé de la période (21 600 + 600 + pire) |
 
-Le différentiel COMPLET relit toute la chaîne depuis le déploiement : 5 488 appels (18 à 27 min) par jour
-d'âge du contrat, au-delà des 36 min de l'étape « Veiller » dès le **2026-09-30**. Aucune cadence ne le
-tient sur `b` ; il reste à `a` (systemd, sans plafond) tant que la famille ne le reprend pas par segments.
-Le QUOTIDIEN, lui, relit un jour de chaîne plus une marge de 200 000 blocs : ≈ 7 500 appels, **25 à 37 min
-sur dRPC** — à la limite des 36 min ; à surveiller dès les premiers jours.
+Les deux différentiels publient `budget_s` = 1 740 s (le pire cas publié en dérive : budget + un segment en vol,
+et non plus une durée qui croît avec l'âge du contrat), et le complet `tour_s` = 604 800 s : **un TOUR complet
+par semaine**, relu depuis le déploiement sur autant d'exécutions qu'il faut ; entre deux tours, une exécution
+rend `TOUR_À_JOUR` en quelques secondes sans rien relire. Le QUOTIDIEN ne relit plus que le neuf (≈ 21,7
+segments ≈ 13 min par jour de chaîne chez dRPC, plus aucun recouvrement de 200 000 blocs).
+
+**Horizon du tour hebdomadaire sur dRPC gratuit, calculé sur la mesure** : un tour à l'âge A jours coûte
+≈ 13·A min de lecture ; à 4 exécutions de 29 min par jour, il dure ≈ A/7,8 jours ⇒ tenable jusqu'à
+**A ≈ 54 jours**. Au-delà, le tour dépasse sa semaine et le battement le dit (`differentiel_retard_non_resorbe`) :
+c'est le signal d'un plan dRPC payant (plages plus larges ⇒ 10 à 100 fois moins d'appels), pas d'un délai plus
+long. Chaque exécution longue retient la file `concurrency` du dépôt : une passe au plus est écartée par
+exécution du complet.
+
+**Sérialisation des tâches (décision du 2026-09-29) — et la borne qu'elle impose à la `passe`.** Un seul groupe
+`concurrency` pour les trois tâches : deux jobs parallèles partiraient du même `etat/` restauré et publieraient chacun
+`etat/` en entier sur `attestations` (cache des journaux, points de reprise des différentiels, `health.json`) ; la
+seconde poussée écraserait la première, et un rebase ne réconcilie pas deux curseurs de cache divergents. Un groupe
+par tâche exigerait un `etat/` PARTITIONNÉ par tâche (cache partagé en lecture seule) : chantier à part. Conséquence
+chiffrée : pendant un `differentiel-complet`, la `passe` attend. Durée d'un complet : ≤ budget 1 740 s + échéance
+dure 120 s + jugement/lot/publication (≈ 1-3 min) ≈ **31-34 min en nominal**, **45 min au pire** (délai du job).
+L'intervalle entre deux passes peut donc atteindre **900 s + 2 700 s = 3 600 s** au pire (≈ 2 900 s en nominal), 4
+fois par jour : une surveillance qui juge la `passe` sur sa période de 900 s doit tolérer ce trou quand le
+`differentiel-complet` du même dépôt est en cours (lisible : run nommé `differentiel-complet`, `run-name`), ou
+lever une P2 de période manquée qui sera, dans ce cas, VRAIE mais attendue.
+Les exécutions portent le nom de leur tâche (`run-name`), exactement celui de l'index des battements.
 
 Chaque lot publié porte le **dernier battement connu de CHAQUE tâche**, octet pour octet et avec son
 horodatage d'origine, indexé et signé dans le manifeste (`battements`) ; une tâche qui n'a jamais tourné y
@@ -357,7 +384,7 @@ fournie : une signature vérifiée contre la clé que le document transporte n'a
 
 Trois choses à regarder dans la sortie :
 - `signé_par` — c'est bien votre clé, celle notée à l'étape 2 ;
-- `empreinte_sources` — c'est bien `f02dcd480e9dde32…` (valeur de `SCEAU.json`), la même que celle publiée par `a` ;
+- `empreinte_sources` — c'est bien `e07912f2f91441ef…` (valeur de `SCEAU.json`), la même que celle publiée par `a` ;
 - `jugement` — `VERT`, ou `ROUGE` avec ses motifs nommés.
 
 Et si vous changez un octet de `courant/health.json`, la commande doit **refuser**. Faites-le une
@@ -403,8 +430,8 @@ print(K.generate().private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryp
 " > /tmp/cle-banc.hex
 
 # BANC_PROJET=<racine du projet> si ce dépôt n est pas rangé dans le projet (jambe G : conformité à la SOURCE)
-bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 12 situations, 55 contrôles, lecture seule
-bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 37 cassures : chaque garde est-elle portante ?
+bash banc/preuves.sh  /tmp/banc-b /tmp/cle-banc.hex     # 14 jambes (A à N), 64 contrôles, lecture seule
+bash banc/cassures.sh /tmp/banc-b /tmp/cle-banc.hex     # 47 cassures : chaque garde est-elle portante ?
 ```
 
 `preuves.sh` : chaîne inattendue → ROUGE · contrôle rouge → ROUGE · tout normal → VERT (témoin
