@@ -12,11 +12,11 @@
   },
   "passe": {
    "fichier": "battement-passe.json",
-   "passe": 24,
+   "passe": 25,
    "présent": true,
    "resultat": "ok",
-   "sha256": "6d7927215ac651f10ccd8ae597fa007955452ddde142d744eaccc50778f4e945",
-   "ts_origine": 1790651902
+   "sha256": "d8a2893b2cc64dc6ae708e316c74e1586c7861ee637ab052f4513cfa75d132d5",
+   "ts_origine": 1790652788
   }
  },
  "chaîne_attendue": {
@@ -31,18 +31,18 @@
   "declencheur": "workflow_dispatch",
   "depot": "EnguerandVitro/spindex-veilleur-b",
   "fournisseur": "github-actions",
-  "run_id": "36516452018",
-  "run_number": "57",
+  "run_id": "36517556378",
+  "run_number": "58",
   "tentative": "1",
-  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/36516452018"
+  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/36517556378"
  },
  "fichiers": {
-  "JUGEMENT.json": "2aed3e5a4cc131530e27b68bac7bf3992f4f3d51a43c7d43647d9a3dd4e02c14",
+  "JUGEMENT.json": "b07872e049ee0275e359712b7b3e058ef4b75b73b8449d416b7052cc29f2a232",
   "amorcage.json": "36d6d6b8ed363a0bf2892755c46f3abc3f4564552306c0d64e126e5445701773",
-  "battement-passe.json": "6d7927215ac651f10ccd8ae597fa007955452ddde142d744eaccc50778f4e945",
-  "derniere-passe.json": "76f88771f26dfa8b75282dc166db5b2c73bfccd7be8b41be4e0edc1cd1e372aa",
-  "durees.json": "68e35fe3e6ab84cd57df9b8a940c6d1f190c157e8d73ac28cfb7df1f4314abf1",
-  "health.json": "8083a39c912c7150efecc2b8b7f6b962988e577d6e87e8a47378d149a7f28bf6"
+  "battement-passe.json": "d8a2893b2cc64dc6ae708e316c74e1586c7861ee637ab052f4513cfa75d132d5",
+  "derniere-passe.json": "e755ff822bfaabfebef936c1dcc1f8df691429bc9785afafca905602b5590231",
+  "durees.json": "df8c63286742dd548e161f631e2b8ab930ea416cb16c7edf99abb0ec28c9a547",
+  "health.json": "d4ed0fe42abc299e12bae4a6481397c53f9773fb048c46c3cf3e2adeea1bbaf4"
  },
  "instance": "b",
  "jugement": {
@@ -51,8 +51,8 @@
   "verdict": "VERT"
  },
  "portée": "Ce lot est l'état publié de l'instance b du veilleur. La signature prouve qu'il vient du détenteur de la clé d'attestation de b, et que ces octets-là n'ont pas bougé. Elle ne prouve ni l'heure, ni qu'aucun lot ne manque, ni que la clé n'a servi qu'ici : GitHub voit le secret, et le propriétaire du compte peut supprimer un job. Le silence de b se juge par la surveillance, pas par ce document.",
- "produit_le": "2026-09-29T03:18:22Z",
- "produit_le_ts": 1790651902,
+ "produit_le": "2026-09-29T03:33:08Z",
+ "produit_le_ts": 1790652788,
  "release_du_paquet_scelle": "3e07ad1972ff46ecea26a5723678dd2dca74f3c82c1d8d840bfb5ea3bf1f4b23",
  "schéma": "spindex-veilleur-b-lot/1",
  "service": "veilleur"
