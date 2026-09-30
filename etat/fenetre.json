@@ -2819,6 +2819,21 @@
     1312.9,
     1716.2
    ]
+  },
+  {
+   "ts": 1790792258,
+   "tête": 126808096,
+   "blocs": 6229,
+   "fenêtre_s": 1304.4,
+   "borne": "exacte",
+   "sonde": "sujet : SpindexRewards.totalStaked() sur 0x34ebcae3a620e50eef215ee2d526c0afa263f8b3",
+   "agrégat": "minimum",
+   "n_sondes": 3,
+   "sondes_s": [
+    1310.8,
+    1305.4,
+    1304.4
+   ]
   }
  ]
 }
