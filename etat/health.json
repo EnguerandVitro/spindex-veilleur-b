@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1790887655,
+ "ts": 1790888562,
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -24,7 +24,7 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_PASSE_S / SPINDEX_VEILLEUR_PRECISION_PASSE_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_PASSE_S dans le .env de l'instance",
    "pire_exécution_s": 121.0,
-   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 94.403 s sur 200 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 52.536 s sur 200 exécution(s))",
    "silence_max_s": 32521,
    "retard_bloc_max": 11996,
    "retard_bloc_max_filet": 325768,
