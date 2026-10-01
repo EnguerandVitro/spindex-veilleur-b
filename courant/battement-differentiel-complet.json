@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "differentiel-complet",
- "ts": 1790837638,
- "passe": 9,
- "bloc": 127018185,
+ "ts": 1790859212,
+ "passe": 10,
+ "bloc": 127144439,
  "resultat": "ok",
  "code": null,
- "detail": "couverture COMPLÈTE : 61 segments sur 61, vérifié jusqu'au bloc 127012022 pour une cible 127012022, 0 restant(s), échéance estimée 2026-10-01T06:53:58Z",
+ "detail": "couverture COMPLÈTE : 67 segments sur 67, vérifié jusqu'au bloc 127138238 pour une cible 127138238, 0 restant(s), échéance estimée 2026-10-01T12:53:32Z",
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "rpc": {
-  "appels": 1209,
+  "appels": 1297,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
@@ -22,10 +22,10 @@
  },
  "couverture": {
   "bloc_debut": 125796406,
-  "bloc_fin_cible": 127012022,
-  "bloc_fin_verifie": 127012022,
-  "segments_verifies": 61,
-  "segments_total": 61,
+  "bloc_fin_cible": 127138238,
+  "bloc_fin_verifie": 127138238,
+  "segments_verifies": 67,
+  "segments_total": 67,
   "complet": true,
   "motif_partiel": null
  },
@@ -39,6 +39,6 @@
    "terminé_ts": 1790671396
   },
   "durée_restante_estimée_s": 0.0,
-  "échéance_estimée_ts": 1790837638
+  "échéance_estimée_ts": 1790859212
  }
 }
