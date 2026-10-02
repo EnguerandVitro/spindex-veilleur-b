@@ -3,7 +3,28 @@
  "battement": {
   "bloc": 127740433,
   "code": null,
-  "detail": "INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 4.06 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "couverture": {
+   "bloc_debut": 125796406,
+   "bloc_fin_cible": 127740123,
+   "bloc_fin_verifie": 127740123,
+   "complet": true,
+   "motif_partiel": null,
+   "segments_total": 97,
+   "segments_verifies": 97
+  },
+  "couverture_estimation": {
+   "durée_restante_estimée_s": 0.0,
+   "journaux_couverts": 3,
+   "retard_blocs": 0,
+   "segments_restants": 0,
+   "tour": {
+    "commencé_ts": 1790671161,
+    "numéro": 1,
+    "terminé_ts": 1790671396
+   },
+   "échéance_estimée_ts": 1790967264
+  },
+  "detail": "couverture COMPLÈTE : 97 segments sur 97, vérifié jusqu'au bloc 127740123 pour une cible 127740123, 0 restant(s), échéance estimée 2026-10-02T18:54:24Z",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -11,29 +32,29 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 391,
+  "passe": 15,
   "resultat": "ok",
   "rpc": {
-   "appels": 192,
+   "appels": 1419,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
-  "tache": "passe",
-  "ts": 1790966878
+  "tache": "differentiel-complet",
+  "ts": 1790967264
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 390,
+ "compteur_precedent": 14,
  "en_cours": null,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-02T18:47:58Z",
- "juge_le_ts": 1790966878,
+ "juge_le": "2026-10-02T18:54:24Z",
+ "juge_le_ts": 1790967264,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 4.06 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : couverture COMPLÈTE : 97 segments sur 97, vérifié jusqu'au bloc 127740123 pour une cible 127740123, 0 restant(s), échéance estimée 2026-10-02T18:54:24Z"
  ],
- "tache": "passe",
+ "tache": "differentiel-complet",
  "verdict": "VERT"
 }
