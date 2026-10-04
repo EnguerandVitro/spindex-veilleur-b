@@ -1,9 +1,9 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 128474798,
+  "bloc": 128481895,
   "code": null,
-  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 5.44 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 5.45 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -11,28 +11,28 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 529,
+  "passe": 530,
   "resultat": "ok",
   "rpc": {
-   "appels": 363,
+   "appels": 369,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1791085684
+  "ts": 1791086557
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 528,
+ "compteur_precedent": 529,
  "en_cours": null,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-04T03:48:04Z",
- "juge_le_ts": 1791085684,
+ "juge_le": "2026-10-04T04:02:37Z",
+ "juge_le_ts": 1791086557,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 5.44 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 5.45 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
  ],
  "tache": "passe",
  "verdict": "VERT"
