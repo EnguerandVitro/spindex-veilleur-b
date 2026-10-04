@@ -1,0 +1,44 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "differentiel-quotidien",
+ "ts": 1791088864,
+ "passe": 7,
+ "bloc": 128498245,
+ "resultat": "ok",
+ "code": null,
+ "detail": "couverture COMPLÈTE : 134 segments sur 134, vérifié jusqu'au bloc 128491785 pour une cible 128491785, 0 restant(s), échéance estimée 2026-10-04T04:41:04Z",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 5620,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ },
+ "couverture": {
+  "bloc_debut": 125796406,
+  "bloc_fin_cible": 128491785,
+  "bloc_fin_verifie": 128491785,
+  "segments_verifies": 134,
+  "segments_total": 134,
+  "complet": true,
+  "motif_partiel": null
+ },
+ "couverture_estimation": {
+  "segments_restants": 0,
+  "retard_blocs": 0,
+  "journaux_couverts": 3,
+  "tour": {
+   "commencé_ts": 1790671813,
+   "numéro": 1,
+   "terminé_ts": null
+  },
+  "durée_restante_estimée_s": 0.0,
+  "échéance_estimée_ts": 1791088864
+ }
+}
