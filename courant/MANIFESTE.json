@@ -18,11 +18,11 @@
   },
   "passe": {
    "fichier": "battement-passe.json",
-   "passe": 658,
+   "passe": 659,
    "présent": true,
    "resultat": "ok",
-   "sha256": "db265b1f3c8420745dfdcd5336f6ef94945a2801f60823ed780148ff160b9a95",
-   "ts_origine": 1791198163
+   "sha256": "3785ad8d27904daa3d58dd40cdb70a62f1f12c875cb3d243c1abb6e839cab8cc",
+   "ts_origine": 1791199056
   }
  },
  "chaîne_attendue": {
@@ -37,22 +37,22 @@
   "declencheur": "workflow_dispatch",
   "depot": "EnguerandVitro/spindex-veilleur-b",
   "fournisseur": "github-actions",
-  "run_id": "37300332698",
-  "run_number": "724",
+  "run_id": "37301943901",
+  "run_number": "725",
   "tentative": "1",
-  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/37300332698"
+  "url": "https://github.com/EnguerandVitro/spindex-veilleur-b/actions/runs/37301943901"
  },
  "fichiers": {
-  "JUGEMENT.json": "4ee9d281243cb91a0aab54188daceead8159f6cfe273bbf99eb9651248decd71",
+  "JUGEMENT.json": "615c73805aee188e238bb37cf6a0bc19893b26187b9af61edc5c56147d92f554",
   "amorcage.json": "36d6d6b8ed363a0bf2892755c46f3abc3f4564552306c0d64e126e5445701773",
   "battement-differentiel-complet.json": "03587636e3b219466c45863b13dfc333928d16f221dd6188a5754c86f08eb408",
   "battement-differentiel-quotidien.json": "8b33817b0ca6dd6bb174d75662956b44f6d1e4ecbc8c7004a1006addfd6272a5",
-  "battement-passe.json": "db265b1f3c8420745dfdcd5336f6ef94945a2801f60823ed780148ff160b9a95",
+  "battement-passe.json": "3785ad8d27904daa3d58dd40cdb70a62f1f12c875cb3d243c1abb6e839cab8cc",
   "derniere-differentiel-complet.json": "3537ff3bc46a7285051967894dfcaa72bd9f19ad109c832623c145bddaf82980",
   "derniere-differentiel-quotidien.json": "31d427cbfde0b4c0108c0564ef63575af61a0d638835cce80e4fdcbc1223ba57",
-  "derniere-passe.json": "dcd5689d7bd1e0e13c4efbe17e83b374db44105a0d7460fea88c43c0f6f4c77e",
-  "durees.json": "af760c9a474f2487dd0b47f413f018e9e40908a9e9820e5a7035232815621a8b",
-  "health.json": "271752dde241b5952c161e5436140cb8ef167c7842c55a58801d469594319790"
+  "derniere-passe.json": "337e85d91141fa45f17420c40fafef08dec2309e177927bc2454f7fa38fc65e9",
+  "durees.json": "58c3c87145f5a4c9e9f83dd7def7e6744fba85126ee9675b98382ac4937c0b08",
+  "health.json": "1fe02eae5439e2a9d6b79408c7293a70d081f77c33ae4822ee89ecbae2ebf3cc"
  },
  "instance": "b",
  "jugement": {
@@ -61,8 +61,8 @@
   "verdict": "VERT"
  },
  "portée": "Ce lot est l'état publié de l'instance b du veilleur. La signature prouve qu'il vient du détenteur de la clé d'attestation de b, et que ces octets-là n'ont pas bougé. Elle ne prouve ni l'heure, ni qu'aucun lot ne manque, ni que la clé n'a servi qu'ici : GitHub voit le secret, et le propriétaire du compte peut supprimer un job. Le silence de b se juge par la surveillance, pas par ce document.",
- "produit_le": "2026-10-05T11:02:44Z",
- "produit_le_ts": 1791198164,
+ "produit_le": "2026-10-05T11:17:36Z",
+ "produit_le_ts": 1791199056,
  "release_du_paquet_scelle": "c32d45f14782c150d47154e4af6f3c24ff6d7e2281f72fa979aa47ac94331508",
  "schéma": "spindex-veilleur-b-lot/1",
  "service": "veilleur"
