@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1791271057,
+ "ts": 1791272021,
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -10,7 +10,7 @@
   "etat": "rpc.testnet.chain.robinhood.com"
  },
  "cadence_blocs_s": {
-  "valeur": 9.98,
+  "valeur": 10.02004008016032,
   "source": "max(mesure de la passe, 9,98 mesuré le 2026-09-21)"
  },
  "taches": {
@@ -26,8 +26,8 @@
    "pire_exécution_s": 121.0,
    "pire_exécution_source": "borne théorique (théorique 121.0 s = 64 appels × 1.89 s ; observé max 87.078 s sur 200 exécution(s))",
    "silence_max_s": 32521,
-   "retard_bloc_max": 11996,
-   "retard_bloc_max_filet": 325768,
+   "retard_bloc_max": 12045,
+   "retard_bloc_max_filet": 327075,
    "période_attendue_s": 900,
    "déclencheur": "workflow_dispatch toutes les 15 min par la machine de surveillance ; filet : cron GitHub */15, bride",
    "budget_s": null,
@@ -49,7 +49,7 @@
    "pire_exécution_s": 2118,
    "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 821.259 s sur 9 exécution(s))",
    "silence_max_s": 89118,
-   "retard_bloc_max": 910536,
+   "retard_bloc_max": 914189,
    "retard_bloc_max_filet": null,
    "période_attendue_s": 86400,
    "déclencheur": "workflow_dispatch une fois par jour a 04:37 UTC par la machine de surveillance ; declencheur externe SEUL, aucun filet",
@@ -81,7 +81,7 @@
    "pire_exécution_s": 2118,
    "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 238.361 s sur 29 exécution(s))",
    "silence_max_s": 24318,
-   "retard_bloc_max": 263832,
+   "retard_bloc_max": 264890,
    "retard_bloc_max_filet": null,
    "période_attendue_s": 21600,
    "déclencheur": "workflow_dispatch toutes les 6 h par la machine de surveillance (declencheur A CREER cote exploitation) ; declencheur externe SEUL, aucun filet",
