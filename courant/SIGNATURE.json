@@ -2,7 +2,7 @@
  "alg": "ed25519",
  "clé_publique": "91e43f205fe215ae98d5c6485bf515ff9766290b8f22b14ff68b1fd2b308ceff",
  "domaine": "spindex-veilleur-b-lot/1\n",
- "empreinte_manifeste_sha256": "edc835502459c2114bdf2bb14a3703554e705e660f86d4bffdcf672dc7dba353",
- "signature": "0bcf4087ae81f2cde5e80490cb6841bb1eba9511a10df70c07588b9202957b19e1bcdd868b76985c35740323f4991a57c9accce232eb237b273a3d30e04fd106",
+ "empreinte_manifeste_sha256": "83982720119627de366815c62fddadaaeeec6647b5e70f7d77b0f4a4287156b3",
+ "signature": "c15827aaa02d7cf5404bcf51d799cbbaf0f1fe290cece05477d3f3465f4546b027c49c43dcf3075bf88c9a9fe1fa953b5309ef925a068c38daaf22441327da0f",
  "à_savoir": "la clé publique portée ici n'authentifie personne à elle seule : elle doit être comparée à une ANCRE posée hors de ce lot (KE#130). `outils/verifier_lot.py` l'exige et refuse sans elle."
 }
