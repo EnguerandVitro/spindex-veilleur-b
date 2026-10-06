@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "differentiel-complet",
- "ts": 1791269641,
- "passe": 29,
- "bloc": 129712701,
- "resultat": "ok",
- "code": null,
- "detail": "couverture COMPLÈTE : 194 segments sur 194, vérifié jusqu'au bloc 129706377 pour une cible 129706377, 0 restant(s), échéance estimée 2026-10-06T06:54:01Z",
+ "ts": 1791292853,
+ "passe": 30,
+ "bloc": 129880018,
+ "resultat": "partiel",
+ "code": "differentiel_partiel",
+ "detail": "PARTIEL : 78 segments sur 202, vérifié jusqu'au bloc 127372005 pour une cible 129872220, 124 restant(s), échéance estimée 2026-10-07T01:20:53Z — budget : arrêt propre avant le segment [127372006, 127392205] — il reste 24.3 s, le plus long segment observé en prend 25.7",
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "rpc": {
-  "appels": 1767,
+  "appels": 15781,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
@@ -22,23 +22,24 @@
  },
  "couverture": {
   "bloc_debut": 125796406,
-  "bloc_fin_cible": 129706377,
-  "bloc_fin_verifie": 129706377,
-  "segments_verifies": 194,
-  "segments_total": 194,
-  "complet": true,
-  "motif_partiel": null
+  "bloc_fin_cible": 129872220,
+  "bloc_fin_verifie": 127372005,
+  "segments_verifies": 78,
+  "segments_total": 202,
+  "complet": false,
+  "motif_partiel": "budget : arrêt propre avant le segment [127372006, 127392205] — il reste 24.3 s, le plus long segment observé en prend 25.7"
  },
  "couverture_estimation": {
-  "segments_restants": 0,
-  "retard_blocs": 0,
+  "segments_restants": 124,
+  "retard_blocs": 2500215,
   "journaux_couverts": 3,
   "tour": {
-   "commencé_ts": 1790671161,
-   "numéro": 1,
-   "terminé_ts": 1790671396
+   "numéro": 2,
+   "commencé_ts": 1791291141,
+   "terminé_ts": null
   },
-  "durée_restante_estimée_s": 0.0,
-  "échéance_estimée_ts": 1791269641
+  "durée_restante_estimée_s": 2721.8,
+  "échéance_estimée_ts": 1791336053,
+  "échéance_hypothèse": "2 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
  }
 }
