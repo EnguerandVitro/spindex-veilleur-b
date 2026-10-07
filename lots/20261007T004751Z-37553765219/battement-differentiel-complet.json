@@ -1,0 +1,45 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "differentiel-complet",
+ "ts": 1791314466,
+ "passe": 31,
+ "bloc": 130032254,
+ "resultat": "partiel",
+ "code": "differentiel_partiel",
+ "detail": "PARTIEL : 139 segments sur 210, vérifié jusqu'au bloc 128604205 pour une cible 130024688, 71 restant(s), échéance estimée 2026-10-07T07:21:06Z — budget : arrêt propre avant le segment [128604206, 128624405] — il reste 10.6 s, le plus long segment observé en prend 34.7",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 12355,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ },
+ "couverture": {
+  "bloc_debut": 125796406,
+  "bloc_fin_cible": 130024688,
+  "bloc_fin_verifie": 128604205,
+  "segments_verifies": 139,
+  "segments_total": 210,
+  "complet": false,
+  "motif_partiel": "budget : arrêt propre avant le segment [128604206, 128624405] — il reste 10.6 s, le plus long segment observé en prend 34.7"
+ },
+ "couverture_estimation": {
+  "segments_restants": 71,
+  "retard_blocs": 1420483,
+  "journaux_couverts": 3,
+  "tour": {
+   "commencé_ts": 1791291141,
+   "numéro": 2,
+   "terminé_ts": null
+  },
+  "durée_restante_estimée_s": 2006.4,
+  "échéance_estimée_ts": 1791357666,
+  "échéance_hypothèse": "2 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
+ }
+}
