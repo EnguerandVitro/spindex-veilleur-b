@@ -1,31 +1,9 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 130178012,
-  "code": "differentiel_partiel",
-  "couverture": {
-   "bloc_debut": 125796406,
-   "bloc_fin_cible": 130167014,
-   "bloc_fin_verifie": 129998005,
-   "complet": false,
-   "motif_partiel": "budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5",
-   "segments_total": 217,
-   "segments_verifies": 208
-  },
-  "couverture_estimation": {
-   "durée_restante_estimée_s": 224.8,
-   "journaux_couverts": 3,
-   "retard_blocs": 169009,
-   "segments_restants": 9,
-   "tour": {
-    "commencé_ts": 1791291141,
-    "numéro": 2,
-    "terminé_ts": null
-   },
-   "échéance_estimée_ts": 1791357665,
-   "échéance_hypothèse": "1 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
-  },
-  "detail": "PARTIEL : 208 segments sur 217, vérifié jusqu'au bloc 129998005 pour une cible 130167014, 9 restant(s), échéance estimée 2026-10-07T07:21:05Z — budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5",
+  "bloc": 130197672,
+  "code": null,
+  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 8.34 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -33,27 +11,29 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 32,
-  "resultat": "partiel",
+  "passe": 806,
+  "resultat": "ok",
   "rpc": {
-   "appels": 13943,
+   "appels": 494,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
-  "tache": "differentiel-complet",
-  "ts": 1791336065
+  "tache": "passe",
+  "ts": 1791336779
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 31,
- "en_cours": "différentiel EN COURS (code « differentiel_partiel ») : il a progressé, la couverture n'est pas encore complète. PARTIEL : 208 segments sur 217, vérifié jusqu'au bloc 129998005 pour une cible 130167014, 9 restant(s), échéance estimée 2026-10-07T07:21:05Z — budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5",
+ "compteur_precedent": 805,
+ "en_cours": null,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-07T01:21:05Z",
- "juge_le_ts": 1791336065,
+ "juge_le": "2026-10-07T01:32:59Z",
+ "juge_le_ts": 1791336779,
  "motifs": [],
- "remarques": [],
- "tache": "differentiel-complet",
- "verdict": "EN_COURS"
+ "remarques": [
+  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 8.34 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+ ],
+ "tache": "passe",
+ "verdict": "VERT"
 }
