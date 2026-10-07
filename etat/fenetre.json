@@ -1,21 +1,6 @@
 {
  "mesures": [
   {
-   "ts": 1790920048,
-   "tête": 127444394,
-   "blocs": 6232,
-   "fenêtre_s": 1438.3,
-   "borne": "exacte",
-   "sonde": "sujet : SpindexRewards.totalStaked() sur 0x34ebcae3a620e50eef215ee2d526c0afa263f8b3",
-   "agrégat": "minimum",
-   "n_sondes": 3,
-   "sondes_s": [
-    1438.3,
-    1443.6,
-    1481.7
-   ]
-  },
-  {
    "ts": 1790920957,
    "tête": 127448410,
    "blocs": 6304,
@@ -7498,6 +7483,21 @@
     1315.6,
     1053.3,
     1024.2
+   ]
+  },
+  {
+   "ts": 1791366455,
+   "tête": 130429133,
+   "blocs": 6221,
+   "fenêtre_s": 867.2,
+   "borne": "exacte",
+   "sonde": "sujet : SpindexRewards.totalStaked() sur 0x34ebcae3a620e50eef215ee2d526c0afa263f8b3",
+   "agrégat": "minimum",
+   "n_sondes": 3,
+   "sondes_s": [
+    898.7,
+    867.2,
+    1574.4
    ]
   }
  ]
