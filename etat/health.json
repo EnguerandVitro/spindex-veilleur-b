@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1791355683,
+ "ts": 1791356236,
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -79,7 +79,7 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S / SPINDEX_VEILLEUR_PRECISION_DIFFERENTIEL_COMPLET_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_DIFFERENTIEL_COMPLET_S dans le .env de l'instance",
    "pire_exécution_s": 2118,
-   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 1728.74 s sur 32 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 1728.74 s sur 33 exécution(s))",
    "silence_max_s": 24318,
    "retard_bloc_max": 263832,
    "retard_bloc_max_filet": null,
@@ -88,12 +88,12 @@
    "budget_s": 1740,
    "couverture": {
     "bloc_debut": 125796406,
-    "bloc_fin_cible": 130167014,
-    "bloc_fin_verifie": 129998005,
-    "segments_verifies": 208,
-    "segments_total": 217,
-    "complet": false,
-    "motif_partiel": "budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5"
+    "bloc_fin_cible": 130344957,
+    "bloc_fin_verifie": 130344957,
+    "segments_verifies": 226,
+    "segments_total": 226,
+    "complet": true,
+    "motif_partiel": null
    },
    "silence_max_source": "dérivé de la période déclarée",
    "tour_s": 604800,

@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "differentiel-complet",
- "ts": 1791336065,
- "passe": 32,
- "bloc": 130178012,
- "resultat": "partiel",
- "code": "differentiel_partiel",
- "detail": "PARTIEL : 208 segments sur 217, vérifié jusqu'au bloc 129998005 pour une cible 130167014, 9 restant(s), échéance estimée 2026-10-07T07:21:05Z — budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5",
+ "ts": 1791356236,
+ "passe": 33,
+ "bloc": 130353127,
+ "resultat": "ok",
+ "code": null,
+ "detail": "couverture COMPLÈTE : 226 segments sur 226, vérifié jusqu'au bloc 130344957 pour une cible 130344957, 0 restant(s), échéance estimée 2026-10-07T06:57:16Z",
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "rpc": {
-  "appels": 13943,
+  "appels": 3507,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
@@ -22,24 +22,23 @@
  },
  "couverture": {
   "bloc_debut": 125796406,
-  "bloc_fin_cible": 130167014,
-  "bloc_fin_verifie": 129998005,
-  "segments_verifies": 208,
-  "segments_total": 217,
-  "complet": false,
-  "motif_partiel": "budget : arrêt propre avant le segment [129998006, 130018205] — il reste 14.3 s, le plus long segment observé en prend 27.5"
+  "bloc_fin_cible": 130344957,
+  "bloc_fin_verifie": 130344957,
+  "segments_verifies": 226,
+  "segments_total": 226,
+  "complet": true,
+  "motif_partiel": null
  },
  "couverture_estimation": {
-  "segments_restants": 9,
-  "retard_blocs": 169009,
+  "segments_restants": 0,
+  "retard_blocs": 0,
   "journaux_couverts": 3,
   "tour": {
    "commencé_ts": 1791291141,
    "numéro": 2,
-   "terminé_ts": null
+   "terminé_ts": 1791356236
   },
-  "durée_restante_estimée_s": 224.8,
-  "échéance_estimée_ts": 1791357665,
-  "échéance_hypothèse": "1 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
+  "durée_restante_estimée_s": 0.0,
+  "échéance_estimée_ts": 1791356236
  }
 }
