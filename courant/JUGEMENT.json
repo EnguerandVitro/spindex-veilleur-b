@@ -1,9 +1,30 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 130800111,
+  "bloc": 130802096,
   "code": null,
-  "detail": "P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 9.31 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3).",
+  "couverture": {
+   "bloc_debut": 125796406,
+   "bloc_fin_cible": 130793507,
+   "bloc_fin_verifie": 130793507,
+   "complet": true,
+   "motif_partiel": null,
+   "segments_total": 248,
+   "segments_verifies": 248
+  },
+  "couverture_estimation": {
+   "durée_restante_estimée_s": 0.0,
+   "journaux_couverts": 3,
+   "retard_blocs": 0,
+   "segments_restants": 0,
+   "tour": {
+    "commencé_ts": 1791291141,
+    "numéro": 2,
+    "terminé_ts": 1791356236
+   },
+   "échéance_estimée_ts": 1791420823
+  },
+  "detail": "couverture COMPLÈTE : 248 segments sur 248, vérifié jusqu'au bloc 130793507 pour une cible 130793507, 0 restant(s), échéance estimée 2026-10-08T00:53:43Z",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -11,29 +32,29 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 902,
+  "passe": 36,
   "resultat": "ok",
   "rpc": {
-   "appels": 297,
+   "appels": 1326,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
-  "tache": "passe",
-  "ts": 1791420476
+  "tache": "differentiel-complet",
+  "ts": 1791420823
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 901,
+ "compteur_precedent": 35,
  "en_cours": null,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-08T00:47:56Z",
- "juge_le_ts": 1791420476,
+ "juge_le": "2026-10-08T00:53:43Z",
+ "juge_le_ts": 1791420823,
  "motifs": [],
  "remarques": [
-  "passe ok, avec remarque : P2 : fenêtre_recul_sans_risque ; INFO : aucune semaine versée ni publiée dans les journaux FINALISÉS depuis le déploiement (bloc 125796406, il y a 9.31 j) ; lecture PROUVÉE par le journal du constructeur. État normal avant la première semaine. Bascule en P1 au-delà de 14 j (2 × la période hebdomadaire de REWARDS_SPEC §3)."
+  "passe ok, avec remarque : couverture COMPLÈTE : 248 segments sur 248, vérifié jusqu'au bloc 130793507 pour une cible 130793507, 0 restant(s), échéance estimée 2026-10-08T00:53:43Z"
  ],
- "tache": "passe",
+ "tache": "differentiel-complet",
  "verdict": "VERT"
 }
