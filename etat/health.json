@@ -2,7 +2,7 @@
  "format": 1,
  "service": "veilleur",
  "instance": "b",
- "ts": 1791463682,
+ "ts": 1791464116,
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "planificateur": "github-actions",
  "fournisseurs": {
@@ -79,7 +79,7 @@
    "délai_aléatoire_s": 0,
    "période_provenance": "DÉCLARÉE par l'instance — déclarée par SPINDEX_VEILLEUR_PERIODE_DIFFERENTIEL_COMPLET_S / SPINDEX_VEILLEUR_PRECISION_DIFFERENTIEL_COMPLET_S / SPINDEX_VEILLEUR_DELAI_ALEATOIRE_DIFFERENTIEL_COMPLET_S dans le .env de l'instance",
    "pire_exécution_s": 2118,
-   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 1728.74 s sur 37 exécution(s))",
+   "pire_exécution_source": "borne théorique (théorique 2118 s = budget 1740 s + un segment en vol 378 s ; observé max 1728.74 s sur 38 exécution(s))",
    "silence_max_s": 24318,
    "retard_bloc_max": 263832,
    "retard_bloc_max_filet": null,
@@ -88,10 +88,10 @@
    "budget_s": 1740,
    "couverture": {
     "bloc_debut": 125796406,
-    "bloc_fin_cible": 130946024,
-    "bloc_fin_verifie": 130946024,
-    "segments_verifies": 255,
-    "segments_total": 255,
+    "bloc_fin_cible": 131099234,
+    "bloc_fin_verifie": 131099234,
+    "segments_verifies": 263,
+    "segments_total": 263,
     "complet": true,
     "motif_partiel": null
    },
