@@ -1,0 +1,44 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "differentiel-complet",
+ "ts": 1791485760,
+ "passe": 39,
+ "bloc": 131237396,
+ "resultat": "ok",
+ "code": null,
+ "detail": "couverture COMPLÈTE : 270 segments sur 270, vérifié jusqu'au bloc 131231699 pour une cible 131231699, 0 restant(s), échéance estimée 2026-10-08T18:56:00Z",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 1369,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ },
+ "couverture": {
+  "bloc_debut": 125796406,
+  "bloc_fin_cible": 131231699,
+  "bloc_fin_verifie": 131231699,
+  "segments_verifies": 270,
+  "segments_total": 270,
+  "complet": true,
+  "motif_partiel": null
+ },
+ "couverture_estimation": {
+  "segments_restants": 0,
+  "retard_blocs": 0,
+  "journaux_couverts": 3,
+  "tour": {
+   "commencé_ts": 1791291141,
+   "numéro": 2,
+   "terminé_ts": 1791356236
+  },
+  "durée_restante_estimée_s": 0.0,
+  "échéance_estimée_ts": 1791485760
+ }
+}
