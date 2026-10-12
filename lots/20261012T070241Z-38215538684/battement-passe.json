@@ -1,0 +1,23 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "passe",
+ "ts": 1791788559,
+ "passe": 1328,
+ "bloc": null,
+ "resultat": "erreur",
+ "code": "section_en_echec:lecture",
+ "detail": "sections en échec : lecture, burn, racines",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 232,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ }
+}
