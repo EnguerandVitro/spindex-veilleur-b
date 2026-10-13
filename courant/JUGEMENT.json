@@ -1,9 +1,9 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 134586725,
-  "code": "alerte_P1",
-  "detail": "P1 : aucune_semaine_depuis_le_deploiement",
+  "bloc": 134593623,
+  "code": "alerte_P0",
+  "detail": "P0 : fenêtre_sous_besoin",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -11,29 +11,29 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 1487,
+  "passe": 1488,
   "resultat": "refus",
   "rpc": {
-   "appels": 367,
+   "appels": 335,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
   "tache": "passe",
-  "ts": 1791930802
+  "ts": 1791931671
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 1486,
+ "compteur_precedent": 1487,
  "en_cours": null,
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-13T22:33:22Z",
- "juge_le_ts": 1791930802,
+ "juge_le": "2026-10-13T22:47:51Z",
+ "juge_le_ts": 1791931671,
  "motifs": [
   {
    "cle": "controle_rouge",
-   "texte": "contrôle ROUGE (code « alerte_P1 ») : la tâche a fait son travail et a trouvé une alerte. P1 : aucune_semaine_depuis_le_deploiement"
+   "texte": "contrôle ROUGE (code « alerte_P0 ») : la tâche a fait son travail et a trouvé une alerte. P0 : fenêtre_sous_besoin"
   }
  ],
  "remarques": [],

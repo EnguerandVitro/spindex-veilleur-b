@@ -1,0 +1,23 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "passe",
+ "ts": 1791931671,
+ "passe": 1488,
+ "bloc": 134593623,
+ "resultat": "refus",
+ "code": "alerte_P0",
+ "detail": "P0 : fenêtre_sous_besoin",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 335,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ }
+}
