@@ -1,0 +1,44 @@
+{
+ "age_max_s": 900,
+ "battement": {
+  "bloc": null,
+  "code": "rpc_error",
+  "detail": "eth_getLogs [126739847,126739947] a échoué (SIGNATURE INCONNUE — ce refus n'est reconnu par aucune signature MESURÉE. On ne devine pas : deviner « erreur de plage » ferait redécouper à l'infini sur un refus qui n'en est pas une. Remède : mesurer ce fournisseur et DÉCLARER la signature dans `veilleur/fournisseurs.py` (SIGNATURES), avec son exemple et sa provenance.) : {\"kind\": \"rpc_error\", \"code\": ",
+  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+  "format": 1,
+  "fournisseurs": {
+   "etat": "rpc.testnet.chain.robinhood.com",
+   "journaux": "robinhood-testnet.drpc.org"
+  },
+  "instance": "b",
+  "passe": 58,
+  "resultat": "erreur",
+  "rpc": {
+   "appels": 9473,
+   "attente_429_s": 0.0,
+   "http_429": 0,
+   "plages_découpées": 0
+  },
+  "service": "veilleur",
+  "tache": "differentiel-complet",
+  "ts": 1791896575
+ },
+ "code_sortie_paquet": 2,
+ "compteur_precedent": 57,
+ "en_cours": null,
+ "format": 1,
+ "instance": "b",
+ "juge_le": "2026-10-13T13:02:55Z",
+ "juge_le_ts": 1791896575,
+ "motifs": [
+  {
+   "cle": "tache_en_erreur",
+   "texte": "la tâche a échoué (code « rpc_error ») : elle n'a pas fait son travail. eth_getLogs [126739847,126739947] a échoué (SIGNATURE INCONNUE — ce refus n'est reconnu par aucune signature MESURÉE. On ne devine pas : deviner « erreur de plage » ferait redécouper à l'infini sur un refus qui n'en est pas une. Remède : mesurer ce fournisseur et DÉCLARER la signature dans `veilleur/fournisseurs.py` (SIGNATURES), avec son exemple et sa provenance.) : {\"kind\": \"rpc_error\", \"code\": "
+  }
+ ],
+ "remarques": [
+  "code de sortie du paquet scellé : 2"
+ ],
+ "tache": "differentiel-complet",
+ "verdict": "ROUGE"
+}
