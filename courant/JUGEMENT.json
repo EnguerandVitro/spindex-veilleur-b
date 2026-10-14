@@ -1,9 +1,31 @@
 {
  "age_max_s": 900,
  "battement": {
-  "bloc": 134650710,
-  "code": "alerte_P1",
-  "detail": "P1 : aucune_semaine_depuis_le_deploiement",
+  "bloc": 134653369,
+  "code": "differentiel_partiel",
+  "couverture": {
+   "bloc_debut": 125796406,
+   "bloc_fin_cible": 134641654,
+   "bloc_fin_verifie": 129816205,
+   "complet": false,
+   "motif_partiel": "budget : arrêt propre avant le segment [129816206, 129836405] — il reste 79.7 s, le plus long segment observé en prend 89.4",
+   "segments_total": 438,
+   "segments_verifies": 199
+  },
+  "couverture_estimation": {
+   "durée_restante_estimée_s": 4662.6,
+   "journaux_couverts": 3,
+   "retard_blocs": 4825449,
+   "segments_restants": 239,
+   "tour": {
+    "commencé_ts": 1791895941,
+    "numéro": 3,
+    "terminé_ts": null
+   },
+   "échéance_estimée_ts": 1792005596,
+   "échéance_hypothèse": "3 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
+  },
+  "detail": "PARTIEL : 199 segments sur 438, vérifié jusqu'au bloc 129816205 pour une cible 134641654, 239 restant(s), échéance estimée 2026-10-14T19:19:56Z — budget : arrêt propre avant le segment [129816206, 129836405] — il reste 79.7 s, le plus long segment observé en prend 89.4",
   "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
   "format": 1,
   "fournisseurs": {
@@ -11,32 +33,27 @@
    "journaux": "robinhood-testnet.drpc.org"
   },
   "instance": "b",
-  "passe": 1497,
-  "resultat": "refus",
+  "passe": 60,
+  "resultat": "partiel",
   "rpc": {
-   "appels": 381,
+   "appels": 17175,
    "attente_429_s": 0.0,
    "http_429": 0,
    "plages_découpées": 0
   },
   "service": "veilleur",
-  "tache": "passe",
-  "ts": 1791938861
+  "tache": "differentiel-complet",
+  "ts": 1791940796
  },
  "code_sortie_paquet": 0,
- "compteur_precedent": 1496,
- "en_cours": null,
+ "compteur_precedent": 59,
+ "en_cours": "différentiel EN COURS (code « differentiel_partiel ») : il a progressé, la couverture n'est pas encore complète. PARTIEL : 199 segments sur 438, vérifié jusqu'au bloc 129816205 pour une cible 134641654, 239 restant(s), échéance estimée 2026-10-14T19:19:56Z — budget : arrêt propre avant le segment [129816206, 129836405] — il reste 79.7 s, le plus long segment observé en prend 89.4",
  "format": 1,
  "instance": "b",
- "juge_le": "2026-10-14T00:47:41Z",
- "juge_le_ts": 1791938861,
- "motifs": [
-  {
-   "cle": "controle_rouge",
-   "texte": "contrôle ROUGE (code « alerte_P1 ») : la tâche a fait son travail et a trouvé une alerte. P1 : aucune_semaine_depuis_le_deploiement"
-  }
- ],
+ "juge_le": "2026-10-14T01:19:56Z",
+ "juge_le_ts": 1791940796,
+ "motifs": [],
  "remarques": [],
- "tache": "passe",
- "verdict": "ROUGE"
+ "tache": "differentiel-complet",
+ "verdict": "EN_COURS"
 }

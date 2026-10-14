@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "differentiel-complet",
- "ts": 1791919161,
- "passe": 59,
- "bloc": 134481416,
+ "ts": 1791940796,
+ "passe": 60,
+ "bloc": 134653369,
  "resultat": "partiel",
  "code": "differentiel_partiel",
- "detail": "PARTIEL : 114 segments sur 430, vérifié jusqu'au bloc 128099205 pour une cible 134472611, 316 restant(s), échéance estimée 2026-10-15T01:19:21Z — budget : arrêt propre avant le segment [128099206, 128119405] — il reste 114.4 s, le plus long segment observé en prend 124.5",
+ "detail": "PARTIEL : 199 segments sur 438, vérifié jusqu'au bloc 129816205 pour une cible 134641654, 239 restant(s), échéance estimée 2026-10-14T19:19:56Z — budget : arrêt propre avant le segment [129816206, 129836405] — il reste 79.7 s, le plus long segment observé en prend 89.4",
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "rpc": {
-  "appels": 13778,
+  "appels": 17175,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
@@ -22,24 +22,24 @@
  },
  "couverture": {
   "bloc_debut": 125796406,
-  "bloc_fin_cible": 134472611,
-  "bloc_fin_verifie": 128099205,
-  "segments_verifies": 114,
-  "segments_total": 430,
+  "bloc_fin_cible": 134641654,
+  "bloc_fin_verifie": 129816205,
+  "segments_verifies": 199,
+  "segments_total": 438,
   "complet": false,
-  "motif_partiel": "budget : arrêt propre avant le segment [128099206, 128119405] — il reste 114.4 s, le plus long segment observé en prend 124.5"
+  "motif_partiel": "budget : arrêt propre avant le segment [129816206, 129836405] — il reste 79.7 s, le plus long segment observé en prend 89.4"
  },
  "couverture_estimation": {
-  "segments_restants": 316,
-  "retard_blocs": 6373406,
+  "segments_restants": 239,
+  "retard_blocs": 4825449,
   "journaux_couverts": 3,
   "tour": {
    "commencé_ts": 1791895941,
    "numéro": 3,
    "terminé_ts": null
   },
-  "durée_restante_estimée_s": 7525.4,
-  "échéance_estimée_ts": 1792027161,
-  "échéance_hypothèse": "5 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
+  "durée_restante_estimée_s": 4662.6,
+  "échéance_estimée_ts": 1792005596,
+  "échéance_hypothèse": "3 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
  }
 }
