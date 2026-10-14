@@ -1,0 +1,42 @@
+{
+ "age_max_s": 900,
+ "battement": {
+  "bloc": 135150699,
+  "code": "alerte_P0",
+  "detail": "P0 : fenêtre_sous_besoin",
+  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+  "format": 1,
+  "fournisseurs": {
+   "etat": "rpc.testnet.chain.robinhood.com",
+   "journaux": "robinhood-testnet.drpc.org"
+  },
+  "instance": "b",
+  "passe": 1556,
+  "resultat": "refus",
+  "rpc": {
+   "appels": 389,
+   "attente_429_s": 0.0,
+   "http_429": 0,
+   "plages_découpées": 0
+  },
+  "service": "veilleur",
+  "tache": "passe",
+  "ts": 1791992874
+ },
+ "code_sortie_paquet": 0,
+ "compteur_precedent": 1555,
+ "en_cours": null,
+ "format": 1,
+ "instance": "b",
+ "juge_le": "2026-10-14T15:47:54Z",
+ "juge_le_ts": 1791992874,
+ "motifs": [
+  {
+   "cle": "controle_rouge",
+   "texte": "contrôle ROUGE (code « alerte_P0 ») : la tâche a fait son travail et a trouvé une alerte. P0 : fenêtre_sous_besoin"
+  }
+ ],
+ "remarques": [],
+ "tache": "passe",
+ "verdict": "ROUGE"
+}
