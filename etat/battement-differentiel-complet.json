@@ -3,15 +3,15 @@
  "service": "veilleur",
  "instance": "b",
  "tache": "differentiel-complet",
- "ts": 1791961230,
- "passe": 61,
- "bloc": null,
- "resultat": "erreur",
- "code": "rpc_error",
- "detail": "eth_getLogs [130987301,130987401] a échoué (SIGNATURE INCONNUE — ce refus n'est reconnu par aucune signature MESURÉE. On ne devine pas : deviner « erreur de plage » ferait redécouper à l'infini sur un refus qui n'en est pas une. Remède : mesurer ce fournisseur et DÉCLARER la signature dans `veilleur/fournisseurs.py` (SIGNATURES), avec son exemple et sa provenance.) : {\"kind\": \"rpc_error\", \"code\": ",
+ "ts": 1791984060,
+ "passe": 62,
+ "bloc": 135057313,
+ "resultat": "partiel",
+ "code": "differentiel_partiel",
+ "detail": "PARTIEL : 394 segments sur 458, vérifié jusqu'au bloc 133755205 pour une cible 135047842, 64 restant(s), échéance estimée 2026-10-14T19:21:00Z — budget : arrêt propre avant le segment [133755206, 133775405] — il reste 15.9 s, le plus long segment observé en prend 25.3",
  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
  "rpc": {
-  "appels": 11752,
+  "appels": 27917,
   "http_429": 0,
   "attente_429_s": 0.0,
   "plages_découpées": 0
@@ -19,5 +19,27 @@
  "fournisseurs": {
   "journaux": "robinhood-testnet.drpc.org",
   "etat": "rpc.testnet.chain.robinhood.com"
+ },
+ "couverture": {
+  "bloc_debut": 125796406,
+  "bloc_fin_cible": 135047842,
+  "bloc_fin_verifie": 133755205,
+  "segments_verifies": 394,
+  "segments_total": 458,
+  "complet": false,
+  "motif_partiel": "budget : arrêt propre avant le segment [133755206, 133775405] — il reste 15.9 s, le plus long segment observé en prend 25.3"
+ },
+ "couverture_estimation": {
+  "segments_restants": 64,
+  "retard_blocs": 1292637,
+  "journaux_couverts": 3,
+  "tour": {
+   "commencé_ts": 1791895941,
+   "numéro": 3,
+   "terminé_ts": null
+  },
+  "durée_restante_estimée_s": 796.4,
+  "échéance_estimée_ts": 1792005660,
+  "échéance_hypothèse": "1 exécution(s) de plus à la période déclarée (21600 s), budget ≈ 1738 s chacune, hors croissance de la chaîne"
  }
 }
