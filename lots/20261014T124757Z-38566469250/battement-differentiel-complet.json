@@ -1,0 +1,23 @@
+{
+ "format": 1,
+ "service": "veilleur",
+ "instance": "b",
+ "tache": "differentiel-complet",
+ "ts": 1791961230,
+ "passe": 61,
+ "bloc": null,
+ "resultat": "erreur",
+ "code": "rpc_error",
+ "detail": "eth_getLogs [130987301,130987401] a échoué (SIGNATURE INCONNUE — ce refus n'est reconnu par aucune signature MESURÉE. On ne devine pas : deviner « erreur de plage » ferait redécouper à l'infini sur un refus qui n'en est pas une. Remède : mesurer ce fournisseur et DÉCLARER la signature dans `veilleur/fournisseurs.py` (SIGNATURES), avec son exemple et sa provenance.) : {\"kind\": \"rpc_error\", \"code\": ",
+ "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+ "rpc": {
+  "appels": 11752,
+  "http_429": 0,
+  "attente_429_s": 0.0,
+  "plages_découpées": 0
+ },
+ "fournisseurs": {
+  "journaux": "robinhood-testnet.drpc.org",
+  "etat": "rpc.testnet.chain.robinhood.com"
+ }
+}
