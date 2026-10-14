@@ -1,0 +1,44 @@
+{
+ "age_max_s": 900,
+ "battement": {
+  "bloc": null,
+  "code": "section_en_echec:lecture",
+  "detail": "sections en échec : lecture, burn, racines",
+  "empreinte": "aed8b48babff4713dc16666eabcb438d571d396d4a18e0ba6d386202b2f58039",
+  "format": 1,
+  "fournisseurs": {
+   "etat": "rpc.testnet.chain.robinhood.com",
+   "journaux": "robinhood-testnet.drpc.org"
+  },
+  "instance": "b",
+  "passe": 1514,
+  "resultat": "erreur",
+  "rpc": {
+   "appels": 98,
+   "attente_429_s": 0.0,
+   "http_429": 0,
+   "plages_découpées": 0
+  },
+  "service": "veilleur",
+  "tache": "passe",
+  "ts": 1791955064
+ },
+ "code_sortie_paquet": 20,
+ "compteur_precedent": 1513,
+ "en_cours": null,
+ "format": 1,
+ "instance": "b",
+ "juge_le": "2026-10-14T05:17:44Z",
+ "juge_le_ts": 1791955064,
+ "motifs": [
+  {
+   "cle": "tache_en_erreur",
+   "texte": "la tâche a échoué (code « section_en_echec:lecture ») : elle n'a pas fait son travail. sections en échec : lecture, burn, racines"
+  }
+ ],
+ "remarques": [
+  "code de sortie du paquet scellé : 20"
+ ],
+ "tache": "passe",
+ "verdict": "ROUGE"
+}
